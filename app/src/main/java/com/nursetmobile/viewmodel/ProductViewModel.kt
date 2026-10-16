@@ -1,0 +1,101 @@
+package com.nursetmobile.viewmodel
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.nursetmobile.data.AppDatabase
+import com.nursetmobile.data.repository.ProductRepository
+import com.nursetmobile.data.entity.ProductEntity
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class ProductViewModel(private val repository: ProductRepository) : ViewModel() {
+
+    private val _isLoading = MutableStateFlow(false)
+    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+
+    private val _error = MutableStateFlow<String?>(null)
+    val error: StateFlow<String?> = _error.asStateFlow()
+
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+
+    private val _selectedCategoryId = MutableStateFlow<Long?>(null)
+    val selectedCategoryId: StateFlow<Long?> = _selectedCategoryId.asStateFlow()
+
+    val products: StateFlow<List<ProductEntity>> = combineQueryCategory()
+        .flatMapLatest { (query, categoryId) -> repository.searchAndFilter(query, categoryId) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val categories: StateFlow<List<com.nursetmobile.data.entity.CategoryEntity>> =
+        repository.allCategories
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val lowStockCount: StateFlow<Int> = repository.lowStockCount
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    private fun combineQueryCategory() = kotlinx.coroutines.flow.combine(
+        _searchQuery,
+        _selectedCategoryId
+    ) { query, categoryId -> Pair(query, categoryId) }
+
+    fun onSearchQueryChange(query: String) {
+        _searchQuery.value = query
+    }
+
+    fun onCategoryFilterChange(categoryId: Long?) {
+        _selectedCategoryId.value = categoryId
+    }
+
+    fun clearFilters() {
+        _searchQuery.value = ""
+        _selectedCategoryId.value = null
+    }
+
+    fun addProduct(name: String, categoryId: Long, price: Long, stock: Int) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            _error.value = null
+            val result = repository.addProduct(name, categoryId, price, stock)
+            _isLoading.value = false
+            result.onFailure { _error.value = it.message }
+        }
+    }
+
+    fun updateProduct(id: Long, name: String, categoryId: Long, price: Long, stock: Int) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            _error.value = null
+            val result = repository.updateProduct(id, name, categoryId, price, stock)
+            _isLoading.value = false
+            result.onFailure { _error.value = it.message }
+        }
+    }
+
+    fun deleteProduct(id: Long) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            _error.value = null
+            val result = repository.deleteProduct(id)
+            _isLoading.value = false
+            result.onFailure { _error.value = it.message }
+        }
+    }
+
+    fun clearError() {
+        _error.value = null
+    }
+
+    class Factory(private val database: AppDatabase) : androidx.lifecycle.ViewModelProvider.Factory {
+        @Suppress("UNCHECKED_CAST")
+        override fun <T : ViewModel> create(modelClass: Class<T>): T {
+            return ProductViewModel(ProductRepository.create(database)) as T
+        }
+    }
+}

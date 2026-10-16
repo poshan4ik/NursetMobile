@@ -1,0 +1,34 @@
+# Gradle
+.gradle
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+# Local configuration
+local.properties
+*.iml
+
+# Android Studio
+.idea/
+*.iws
+*.ipr
+out/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IntelliJ inspection dumps at project root (accidental export)
+/*.xml
+/.descriptions.xml
+/index.html
+/script.js
+/styles.css
+
+# Kotlin
+*.klib
+*.kexe
+
+# Compose
+compose-web/.gradle/
