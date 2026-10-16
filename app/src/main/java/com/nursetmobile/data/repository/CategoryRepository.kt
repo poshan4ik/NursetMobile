@@ -10,8 +10,6 @@ class CategoryRepository(private val dao: CategoryDao) {
 
     val allCategories: Flow<List<CategoryEntity>> = dao.getAll()
 
-    suspend fun getById(id: Long): CategoryEntity? = dao.getById(id)
-
     suspend fun addCategory(name: String): Result<Long> {
         val trimmedName = name.trim()
         if (trimmedName.isEmpty()) {

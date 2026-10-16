@@ -5,10 +5,13 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.nursetmobile.data.AppDatabase
 import com.nursetmobile.data.entity.CategoryEntity
+import com.nursetmobile.data.entity.OrderEntity
+import com.nursetmobile.data.entity.OrderItemEntity
 import com.nursetmobile.data.entity.ProductEntity
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -127,12 +130,36 @@ class ProductRepositoryTest {
     }
 
     @Test
+    fun `удаление товара, входящего в активный заказ — ошибка`() = runBlocking {
+        val productId = database.productDao()
+            .insert(ProductEntity("Товар в заказе", categoryId, 1000, 5))
+
+        // Создаём активный заказ (NEW) с этим товаром
+        val orderId = database.orderDao().insertOrder(
+            OrderEntity(System.currentTimeMillis(), 1000, 0)
+        )
+        database.orderDao().insertOrderItems(
+            listOf(
+                OrderItemEntity(orderId, productId, "Товар в заказе", 1000, 1)
+            )
+        )
+
+        val deleteResult = repository.deleteProduct(productId)
+        assertFalse(deleteResult.isSuccess)
+        assertEquals(
+            "Нельзя удалить товар, который используется в активном заказе.",
+            deleteResult.exceptionOrNull()?.message
+        )
+        assertNotNull(database.productDao().getById(productId))
+    }
+
+    @Test
     fun `поиск товаров по названию работает`() = runBlocking {
         repository.addProduct("iPhone 15", categoryId, 1000, 5)
         repository.addProduct("Samsung Galaxy", categoryId, 2000, 3)
         repository.addProduct("iPhone 14", categoryId, 1500, 2)
 
-        val results = repository.searchByName("iPhone").first()
+        val results = repository.searchAndFilter("iPhone", null).first()
         assertEquals(2, results.size)
         assertTrue(results.any { it.name.contains("iPhone") })
     }

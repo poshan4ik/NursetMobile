@@ -25,8 +25,6 @@ class OrderRepository(private val database: AppDatabase) {
 
     suspend fun getOrderWithItems(orderId: Long) = orderDao.getOrderWithItems(orderId)
 
-    suspend fun countOrders(): Int = orderDao.countOrders()
-
     suspend fun createOrder(items: List<OrderItemInput>): Result<Long> {
         if (items.isEmpty()) {
             return Result.failure(IllegalArgumentException("Корзина пуста. Добавьте товары."))

@@ -4,7 +4,6 @@ import androidx.arch.core.executor.testing.InstantTaskExecutorRule
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.nursetmobile.data.AppDatabase
-import com.nursetmobile.data.entity.CategoryEntity
 import com.nursetmobile.data.entity.ProductEntity
 import org.junit.After
 import org.junit.Assert.assertEquals

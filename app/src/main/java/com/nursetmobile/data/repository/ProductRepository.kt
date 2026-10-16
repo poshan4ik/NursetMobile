@@ -16,25 +16,9 @@ class ProductRepository(
 
     val allProducts: Flow<List<ProductEntity>> = productDao.getAll()
 
-    val lowStockProducts: Flow<List<ProductEntity>> = productDao.getLowStockProducts()
-
     val lowStockCount: Flow<Int> = productDao.getLowStockProducts().map { it.size }
 
-    suspend fun getById(id: Long): ProductEntity? = productDao.getById(id)
-
     val allCategories: Flow<List<CategoryEntity>> = categoryDao.getAll()
-
-    fun searchByName(query: String): Flow<List<ProductEntity>> {
-        return if (query.trim().isEmpty()) {
-            allProducts
-        } else {
-            productDao.searchByName(query)
-        }
-    }
-
-    fun getByCategory(categoryId: Long?): Flow<List<ProductEntity>> {
-        return categoryId?.let { productDao.getByCategory(it) } ?: allProducts
-    }
 
     fun searchAndFilter(query: String, categoryId: Long?): Flow<List<ProductEntity>> {
         return if (query.trim().isNotEmpty() && categoryId != null) {
