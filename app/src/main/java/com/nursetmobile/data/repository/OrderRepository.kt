@@ -1,5 +1,6 @@
 package com.nursetmobile.data.repository
 
+import androidx.room.withTransaction
 import com.nursetmobile.data.AppDatabase
 import com.nursetmobile.data.dao.OrderDao
 import com.nursetmobile.data.dao.ProductDao
@@ -12,69 +13,49 @@ import com.nursetmobile.domain.isActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
-class OrderRepository(
-    private val orderDao: OrderDao,
-    private val productDao: ProductDao
-) {
+class OrderRepository(private val database: AppDatabase) {
+
+    private val orderDao: OrderDao = database.orderDao()
+    private val productDao: ProductDao = database.productDao()
 
     val allOrders: Flow<List<OrderEntity>> = orderDao.getAllOrders()
 
+    val availableProducts: Flow<List<ProductEntity>> = productDao.getAll()
+        .map { list -> list.filter { it.stock > 0 } }
+
     suspend fun getOrderWithItems(orderId: Long) = orderDao.getOrderWithItems(orderId)
+
+    suspend fun countOrders(): Int = orderDao.countOrders()
 
     suspend fun createOrder(items: List<OrderItemInput>): Result<Long> {
         if (items.isEmpty()) {
             return Result.failure(IllegalArgumentException("Корзина пуста. Добавьте товары."))
         }
-        for (item in items) {
-            if (item.quantity <= 0) {
-                return Result.failure(IllegalArgumentException("Количество должно быть больше нуля."))
-            }
+        if (items.any { it.quantity <= 0 }) {
+            return Result.failure(IllegalArgumentException("Количество должно быть больше нуля."))
         }
         return try {
-            for (item in items) {
-                val product = productDao.getById(item.productId)
-                    ?: return Result.failure(IllegalArgumentException("Товар не найден (ID: ${item.productId})."))
-                if (product.stock < item.quantity) {
-                    return Result.failure(IllegalArgumentException(
-                        "Недостаточно товара на складе. Доступно: ${product.stock} шт."
-                    ))
-                }
-            }
-            val totalPrice = items.sumOf { it.price * it.quantity }
-            val order = OrderEntity(
-                createdAt = System.currentTimeMillis(),
-                totalPrice = totalPrice,
-                status = OrderStatus.NEW.value
-            )
-            val orderItems = items.map { input ->
-                val product = productDao.getById(input.productId)!!
-                OrderItemEntity(
-                    orderId = 0,
-                    productId = input.productId,
-                    productName = product.name,
-                    price = product.price,
-                    quantity = input.quantity
-                )
-            }
-            val orderId = orderDao.createOrderWithItems(order, orderItems)
-            for (item in items) {
-                val product = productDao.getById(item.productId)!!
-                productDao.update(product.copy(stock = product.stock - item.quantity))
-            }
+            val orderId = database.withTransaction { createOrderInTransaction(items) }
             Result.success(orderId)
         } catch (e: Exception) {
-            Result.failure(IllegalArgumentException("Ошибка при создании заказа: ${e.message}"))
+            Result.failure(e)
         }
     }
 
     suspend fun updateOrderStatus(orderId: Long, newStatus: OrderStatus): Result<Unit> {
+        // Отмена через отдельный метод: он возвращает товары на склад
+        if (newStatus == OrderStatus.CANCELLED) {
+            return cancelOrder(orderId)
+        }
         val order = orderDao.getOrderById(orderId)
             ?: return Result.failure(IllegalArgumentException("Заказ не найден."))
         val currentStatus = OrderStatus.fromValue(order.status)
         if (!canTransitionTo(currentStatus, newStatus)) {
-            return Result.failure(IllegalArgumentException(
-                "Недопустимый переход статуса: ${currentStatus.displayName} → ${newStatus.displayName}"
-            ))
+            return Result.failure(
+                IllegalArgumentException(
+                    "Недопустимый переход статуса: ${currentStatus.displayName} → ${newStatus.displayName}"
+                )
+            )
         }
         orderDao.updateOrder(order.copy(status = newStatus.value))
         return Result.success(Unit)
@@ -88,35 +69,84 @@ class OrderRepository(
             return Result.failure(IllegalArgumentException("Заказ уже отменён."))
         }
         if (!isActive(currentStatus)) {
-            return Result.failure(IllegalArgumentException("Можно отменить только активные заказы (Новый или В обработке)."))
+            return Result.failure(
+                IllegalArgumentException("Можно отменить только активные заказы (Новый или В обработке).")
+            )
         }
         return try {
-            val freshOrder = orderDao.getOrderById(orderId)
-                ?: return Result.failure(IllegalArgumentException("Заказ не найден."))
-            if (OrderStatus.fromValue(freshOrder.status) == OrderStatus.CANCELLED) {
-                return Result.failure(IllegalArgumentException("Заказ уже отменён (проверка в транзакции)."))
+            database.withTransaction {
+                cancelOrderInTransaction(orderId)
             }
-            val items = orderDao.getItemsByOrderId(orderId)
-            for (item in items) {
-                val product = productDao.getById(item.productId)
-                if (product != null) {
-                    productDao.update(product.copy(stock = product.stock + item.quantity))
-                }
-            }
-            orderDao.updateOrder(freshOrder.copy(status = OrderStatus.CANCELLED.value))
             Result.success(Unit)
         } catch (e: Exception) {
-            Result.failure(IllegalArgumentException("Ошибка при отмене заказа: ${e.message}"))
+            Result.failure(e)
         }
     }
 
-    suspend fun countOrders(): Int = orderDao.countOrders()
+    // Возвращает товары на склад и ставит статус CANCELLED — все изменения в одной транзакции
+    private suspend fun cancelOrderInTransaction(orderId: Long) {
+        val order = orderDao.getOrderById(orderId)
+            ?: throw IllegalArgumentException("Заказ не найден.")
+        if (OrderStatus.fromValue(order.status) == OrderStatus.CANCELLED) {
+            throw IllegalArgumentException("Заказ уже отменён.")
+        }
+        val items = orderDao.getItemsByOrderId(orderId)
+        for (item in items) {
+            val product = productDao.getById(item.productId)
+            if (product != null) {
+                productDao.update(product.copy(stock = product.stock + item.quantity))
+            }
+        }
+        orderDao.updateOrder(order.copy(status = OrderStatus.CANCELLED.value))
+    }
 
-    val availableProducts: Flow<List<ProductEntity>> = productDao.getAll().map { list -> list.filter { it.stock > 0 } }
+    // Создание заказа и списание остатков — все изменения в одной транзакции
+    private suspend fun createOrderInTransaction(items: List<OrderItemInput>): Long {
+        // Повторяющиеся товары объединяем: суммарное количество по каждому товару
+        val totalQuantityByProductId = items
+            .groupBy { it.productId }
+            .mapValues { (_, productItems) -> productItems.sumOf { item -> item.quantity } }
+
+        // Проверяем остатки по объединённому количеству и берём цены из базы
+        val products = totalQuantityByProductId.mapValues { (productId, totalQuantity) ->
+            val product = productDao.getById(productId)
+                ?: throw IllegalArgumentException("Товар не найден (ID: $productId).")
+            if (product.stock < totalQuantity) {
+                throw IllegalArgumentException("Недостаточно товара на складе. Доступно: ${product.stock} шт.")
+            }
+            product
+        }
+
+        val totalPrice = products.values.sumOf { product ->
+            product.price * totalQuantityByProductId.getValue(product.id)
+        }
+
+        val order = OrderEntity(
+            createdAt = System.currentTimeMillis(),
+            totalPrice = totalPrice,
+            status = OrderStatus.NEW.value
+        )
+        val orderItems = products.values.map { product ->
+            OrderItemEntity(
+                orderId = 0,
+                productId = product.id,
+                productName = product.name,
+                price = product.price,
+                quantity = totalQuantityByProductId.getValue(product.id)
+            )
+        }
+        val orderId = orderDao.createOrderWithItems(order, orderItems)
+
+        products.values.forEach { product ->
+            productDao.update(
+                product.copy(stock = product.stock - totalQuantityByProductId.getValue(product.id))
+            )
+        }
+        return orderId
+    }
 
     companion object {
-        fun create(database: AppDatabase): OrderRepository =
-            OrderRepository(database.orderDao(), database.productDao())
+        fun create(database: AppDatabase): OrderRepository = OrderRepository(database)
     }
 }
 

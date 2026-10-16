@@ -270,4 +270,77 @@ class OrderRepositoryTest {
         val order = database.orderDao().getOrderById(orderId)
         assertEquals(OrderStatus.COMPLETED.value, order?.status)
     }
+
+    @Test
+    fun `createOrder при ошибке — ничего не меняется (одна транзакция)`() = runBlocking {
+        // Второй товар не существует: заказ не должен создаться, остатки — не измениться
+        val items = listOf(
+            OrderItemInput(product1Id, 3, 1000),
+            OrderItemInput(999L, 1, 500)
+        )
+
+        val result = repository.createOrder(items)
+        assertFalse(result.isSuccess)
+        assertEquals("Товар не найден (ID: 999).", result.exceptionOrNull()?.message)
+
+        val p1 = database.productDao().getById(product1Id)
+        assertEquals(10, p1?.stock)
+        assertEquals(0, database.orderDao().countOrders())
+    }
+
+    @Test
+    fun `cancelOrder — при отмене товары возвращаются на склад`() = runBlocking {
+        val items = listOf(OrderItemInput(product1Id, 3, 1000))
+        val orderId = repository.createOrder(items).getOrThrow()
+        assertEquals(7, database.productDao().getById(product1Id)?.stock)
+
+        repository.updateOrderStatus(orderId, OrderStatus.PROCESSING)
+        val result = repository.updateOrderStatus(orderId, OrderStatus.CANCELLED)
+        assertTrue(result.isSuccess)
+
+        val order = database.orderDao().getOrderById(orderId)
+        assertEquals(OrderStatus.CANCELLED.value, order?.status)
+        assertEquals(10, database.productDao().getById(product1Id)?.stock)
+    }
+
+    @Test
+    fun `сумма заказа считается по ценам из базы, а не из корзины`() = runBlocking {
+        // Цена из корзины намеренно занижена — в заказе должна быть цена из базы (1000)
+        val items = listOf(OrderItemInput(product1Id, 2, 1))
+
+        val orderId = repository.createOrder(items).getOrThrow()
+
+        val order = database.orderDao().getOrderById(orderId)
+        assertEquals(2000L, order?.totalPrice)
+        val orderItems = database.orderDao().getItemsByOrderId(orderId)
+        assertEquals(1000L, orderItems[0].price)
+    }
+
+    @Test
+    fun `один и тот же товар в корзине дважды — количество складывается перед проверкой`() = runBlocking {
+        // 6+6=12 > 10 в наличии — ошибка, остатки не меняются
+        val tooMany = listOf(
+            OrderItemInput(product1Id, 6, 1000),
+            OrderItemInput(product1Id, 6, 1000)
+        )
+        val failResult = repository.createOrder(tooMany)
+        assertFalse(failResult.isSuccess)
+        assertEquals(
+            "Недостаточно товара на складе. Доступно: 10 шт.",
+            failResult.exceptionOrNull()?.message
+        )
+        assertEquals(10, database.productDao().getById(product1Id)?.stock)
+
+        // 3+4=7 <= 10 — успех, одна позиция заказа с количеством 7, остаток 3
+        val okItems = listOf(
+            OrderItemInput(product1Id, 3, 1000),
+            OrderItemInput(product1Id, 4, 1000)
+        )
+        val orderId = repository.createOrder(okItems).getOrThrow()
+        val orderItems = database.orderDao().getItemsByOrderId(orderId)
+        assertEquals(1, orderItems.size)
+        assertEquals(7, orderItems[0].quantity)
+        assertEquals(3, database.productDao().getById(product1Id)?.stock)
+        assertEquals(7000L, database.orderDao().getOrderById(orderId)?.totalPrice)
+    }
 }
