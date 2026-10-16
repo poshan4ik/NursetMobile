@@ -8,9 +8,6 @@ import androidx.room.Update
 import com.nursetmobile.data.entity.ProductEntity
 import kotlinx.coroutines.flow.Flow
 
-/**
- * DAO для товаров.
- */
 @Dao
 interface ProductDao {
 
@@ -29,6 +26,7 @@ interface ProductDao {
     @Query("SELECT * FROM products WHERE id = :id")
     suspend fun getById(id: Long): ProductEntity?
 
+    // lower() не обрабатывает кириллицу, поэтому дубликаты дополнительно проверяем в Kotlin
     @Query("SELECT * FROM products WHERE lower(name) LIKE '%' || lower(:query) || '%' ORDER BY name COLLATE NOCASE ASC")
     fun searchByName(query: String): Flow<List<ProductEntity>>
 
@@ -41,20 +39,11 @@ interface ProductDao {
     @Query("SELECT * FROM products WHERE stock <= 3 AND stock > 0")
     fun getLowStockProducts(): Flow<List<ProductEntity>>
 
-    @Query("SELECT COUNT(*) FROM products WHERE stock <= 3 AND stock > 0")
-    suspend fun countLowStockProducts(): Int
-
-    @Query("SELECT * FROM products WHERE id IN (:ids)")
-    suspend fun getByIds(ids: List<Long>): List<ProductEntity>
-
-    @Query("SELECT * FROM products WHERE id = :id AND stock >= :quantity")
-    suspend fun checkStock(id: Long, quantity: Int): ProductEntity?
-
-    // Для проверки: используется ли товар в активных заказах
+    // Проверка: используется ли товар в активных заказах (NEW, PROCESSING)
     @Query("""
         SELECT COUNT(*) FROM order_items oi
         JOIN orders o ON oi.orderId = o.id
-        WHERE oi.productId = :productId AND o.status IN (0, 1) -- NEW, PROCESSING
+        WHERE oi.productId = :productId AND o.status IN (0, 1)
     """)
     suspend fun countActiveOrderItems(productId: Long): Int
 }

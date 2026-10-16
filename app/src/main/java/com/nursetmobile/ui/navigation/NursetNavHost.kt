@@ -14,9 +14,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
@@ -35,15 +32,10 @@ import com.nursetmobile.ui.orders.CreateOrderScreen
 import com.nursetmobile.ui.orders.OrderDetailsScreen
 import com.nursetmobile.ui.orders.OrdersScreen
 import com.nursetmobile.ui.products.ProductsScreen
-import com.nursetmobile.viewmodel.HomeViewModel
 
-/**
- * Навигационный хост приложения с нижней панелью вкладок.
- */
 @Composable
 fun NursetNavHost(
-    navController: NavHostController = rememberNavController(),
-    homeViewModel: HomeViewModel
+    navController: NavHostController = rememberNavController()
 ) {
     val tabs = listOf(
         TabItem(R.string.home, Icons.Default.Home, "home"),
@@ -52,7 +44,7 @@ fun NursetNavHost(
         TabItem(R.string.orders, Icons.Default.ReceiptLong, "orders")
     )
 
-    // Текущий маршрут определяет выбранную вкладку
+    // Какая вкладка выбрана: определяется по текущему маршруту
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
     val selectedTab = when {
@@ -107,23 +99,19 @@ fun NursetNavHost(
                 HomeScreen(onTabClick = { index -> navigateToTab(index) })
             }
             composable("products") {
-                ProductsScreen(onTabClick = { index -> navigateToTab(index) })
+                ProductsScreen()
             }
             composable("categories") {
-                CategoriesScreen(onTabClick = { index -> navigateToTab(index) })
+                CategoriesScreen()
             }
             composable("orders") {
                 OrdersScreen(
-                    onTabClick = { index -> navigateToTab(index) },
                     onCreateOrder = { navController.navigate("create_order") },
                     onOrderClick = { orderId -> navController.navigate("order_details/$orderId") }
                 )
             }
             composable("create_order") {
-                CreateOrderScreen(
-                    onTabClick = { index -> navigateToTab(index) },
-                    onBack = { navController.popBackStack() }
-                )
+                CreateOrderScreen(onBack = { navController.popBackStack() })
             }
             composable(
                 route = "order_details/{orderId}",
@@ -132,7 +120,6 @@ fun NursetNavHost(
                 val orderId = backStackEntry.arguments?.getLong("orderId") ?: 0L
                 OrderDetailsScreen(
                     orderId = orderId,
-                    onTabClick = { index -> navigateToTab(index) },
                     onBack = { navController.popBackStack() }
                 )
             }

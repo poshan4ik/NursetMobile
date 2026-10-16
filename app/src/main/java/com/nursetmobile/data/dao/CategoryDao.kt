@@ -8,9 +8,6 @@ import androidx.room.Update
 import com.nursetmobile.data.entity.CategoryEntity
 import kotlinx.coroutines.flow.Flow
 
-/**
- * DAO для категорий.
- */
 @Dao
 interface CategoryDao {
 
@@ -29,12 +26,6 @@ interface CategoryDao {
     @Query("SELECT * FROM categories WHERE id = :id")
     suspend fun getById(id: Long): CategoryEntity?
 
-    @Query("SELECT * FROM categories WHERE lower(name) = lower(:name)")
-    suspend fun findByName(name: String): CategoryEntity?
-
     @Query("SELECT COUNT(*) FROM products WHERE categoryId = :categoryId")
     suspend fun countProductsInCategory(categoryId: Long): Int
-
-    @Query("SELECT * FROM categories WHERE id IN (:ids)")
-    suspend fun getByIds(ids: List<Long>): List<CategoryEntity>
 }

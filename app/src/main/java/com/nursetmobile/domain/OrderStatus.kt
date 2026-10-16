@@ -1,9 +1,5 @@
 package com.nursetmobile.domain
 
-/**
- * Статусы заказа.
- * NEW=0, PROCESSING=1, COMPLETED=2, CANCELLED=3
- */
 enum class OrderStatus(val value: Int, val displayName: String) {
     NEW(0, "Новый"),
     PROCESSING(1, "В обработке"),
@@ -15,10 +11,7 @@ enum class OrderStatus(val value: Int, val displayName: String) {
     }
 }
 
-/**
- * Проверка допустимости перехода статуса.
- * Чистая функция для unit-тестирования.
- */
+// Допустимые переходы статусов заказа (честная функция — тестируется обычным JUnit)
 fun canTransitionTo(current: OrderStatus, next: OrderStatus): Boolean {
     return when (current) {
         OrderStatus.NEW -> next in setOf(OrderStatus.PROCESSING, OrderStatus.CANCELLED)
@@ -27,7 +20,5 @@ fun canTransitionTo(current: OrderStatus, next: OrderStatus): Boolean {
     }
 }
 
-/**
- * Проверка, является ли заказ "активным" (можно отменить).
- */
+// Активным считается заказ, который ещё можно отменить
 fun isActive(status: OrderStatus): Boolean = status in setOf(OrderStatus.NEW, OrderStatus.PROCESSING)

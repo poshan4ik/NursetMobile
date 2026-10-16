@@ -1,8 +1,10 @@
 package com.nursetmobile.viewmodel
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.nursetmobile.data.AppDatabase
+import com.nursetmobile.data.entity.CategoryEntity
 import com.nursetmobile.data.repository.CategoryRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -19,7 +21,7 @@ class CategoryViewModel(private val repository: CategoryRepository) : ViewModel(
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
-    val categories: StateFlow<List<com.nursetmobile.data.entity.CategoryEntity>> =
+    val categories: StateFlow<List<CategoryEntity>> =
         repository.allCategories
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -57,7 +59,7 @@ class CategoryViewModel(private val repository: CategoryRepository) : ViewModel(
         _error.value = null
     }
 
-    class Factory(private val database: AppDatabase) : androidx.lifecycle.ViewModelProvider.Factory {
+    class Factory(private val database: AppDatabase) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             return CategoryViewModel(CategoryRepository.create(database)) as T

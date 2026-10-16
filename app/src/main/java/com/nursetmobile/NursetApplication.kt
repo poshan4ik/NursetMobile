@@ -6,10 +6,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
-/**
- * Класс Application для инициализации Room Database.
- * Предоставляет статический доступ к экземпляру БД.
- */
+// Application хранит один общий экземпляр базы данных
 class NursetApplication : Application() {
 
     companion object {
@@ -29,7 +26,7 @@ class NursetApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        // Инициализация БД и заполнение демоданными при первом запуске (в фоне)
+        // Заполняем демоданными при первом запуске — в фоне, чтобы не тормозить старт
         CoroutineScope(Dispatchers.IO).launch {
             val db = AppDatabase.getInstance(this@NursetApplication)
             _database = db

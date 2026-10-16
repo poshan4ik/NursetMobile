@@ -64,13 +64,9 @@ import com.nursetmobile.data.entity.ProductEntity
 import com.nursetmobile.ui.formatPrice
 import com.nursetmobile.viewmodel.ProductViewModel
 
-/**
- * Экран товаров: поиск, фильтр по категории, добавление/редактирование/удаление.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProductsScreen(
-    onTabClick: (Int) -> Unit,
     viewModel: ProductViewModel = viewModel(
         factory = ProductViewModel.Factory(
             (LocalContext.current.applicationContext as NursetApplication).database
@@ -93,7 +89,6 @@ fun ProductsScreen(
         }
     }
 
-    // Состояния диалогов
     var showAddDialog by remember { mutableStateOf(false) }
     var editingProduct by remember { mutableStateOf<ProductEntity?>(null) }
     var deletingProduct by remember { mutableStateOf<ProductEntity?>(null) }
@@ -124,96 +119,23 @@ fun ProductsScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            // Поиск по названию
-            TextField(
-                value = searchQuery,
-                onValueChange = { viewModel.onSearchQueryChange(it) },
-                placeholder = { Text(stringResource(R.string.search_hint)) },
-                leadingIcon = { Icon(Icons.Default.Inventory2, contentDescription = null) },
-                trailingIcon = {
-                    if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { viewModel.onSearchQueryChange("") }) {
-                            Icon(Icons.Default.Close, contentDescription = "Очистить поиск")
-                        }
-                    }
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                singleLine = true
+            ProductSearchBar(
+                searchQuery = searchQuery,
+                onQueryChange = { viewModel.onSearchQueryChange(it) }
             )
 
-            // Фильтр по категории
-            LazyRow(
-                contentPadding = PaddingValues(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                item {
-                    FilterChip(
-                        selected = selectedCategoryId == null,
-                        onClick = { viewModel.onCategoryFilterChange(null) },
-                        label = { Text(stringResource(R.string.all_categories)) }
-                    )
-                }
-                items(categories) { category ->
-                    FilterChip(
-                        selected = selectedCategoryId == category.id,
-                        onClick = {
-                            viewModel.onCategoryFilterChange(
-                                if (selectedCategoryId == category.id) null else category.id
-                            )
-                        },
-                        label = { Text(category.name) }
-                    )
-                }
-            }
+            CategoryFilterChips(
+                categories = categories,
+                selectedCategoryId = selectedCategoryId,
+                onCategorySelected = { viewModel.onCategoryFilterChange(it) }
+            )
 
-            // Предупреждение о низком остатке
             if (lowStockCount > 0) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp)
-                        .background(MaterialTheme.colorScheme.errorContainer)
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.Default.Warning,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.error
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = stringResource(R.string.low_stock_warning, lowStockCount),
-                        color = MaterialTheme.colorScheme.error,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
+                LowStockWarning(lowStockCount)
             }
 
             if (products.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Inventory2,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f),
-                            modifier = Modifier.size(64.dp)
-                        )
-                        Text(
-                            text = stringResource(R.string.empty_products),
-                            fontSize = 18.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
+                EmptyProductsMessage()
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
@@ -232,7 +154,6 @@ fun ProductsScreen(
         }
     }
 
-    // Диалог добавления товара
     if (showAddDialog) {
         ProductDialog(
             title = stringResource(R.string.add),
@@ -246,7 +167,6 @@ fun ProductsScreen(
         )
     }
 
-    // Диалог редактирования товара
     editingProduct?.let { product ->
         ProductDialog(
             title = stringResource(R.string.edit),
@@ -260,40 +180,152 @@ fun ProductsScreen(
         )
     }
 
-    // Диалог подтверждения удаления товара
     deletingProduct?.let { product ->
-        AlertDialog(
-            onDismissRequest = { deletingProduct = null },
-            title = {
-                Text(text = stringResource(R.string.confirm_delete_product, product.name))
+        DeleteProductDialog(
+            productName = product.name,
+            onConfirm = {
+                viewModel.deleteProduct(product.id)
+                deletingProduct = null
             },
-            text = { Text(text = "Это действие нельзя отменить.") },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        viewModel.deleteProduct(product.id)
-                        deletingProduct = null
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-                ) {
-                    Text(
-                        text = stringResource(R.string.delete),
-                        color = MaterialTheme.colorScheme.onError
-                    )
-                }
-            },
-            dismissButton = {
-                Button(onClick = { deletingProduct = null }) {
-                    Text(text = stringResource(R.string.cancel))
-                }
-            }
+            onDismiss = { deletingProduct = null }
         )
     }
 }
 
-/**
- * Карточка товара в списке.
- */
+@Composable
+private fun ProductSearchBar(
+    searchQuery: String,
+    onQueryChange: (String) -> Unit
+) {
+    TextField(
+        value = searchQuery,
+        onValueChange = onQueryChange,
+        placeholder = { Text(stringResource(R.string.search_hint)) },
+        leadingIcon = { Icon(Icons.Default.Inventory2, contentDescription = null) },
+        trailingIcon = {
+            if (searchQuery.isNotEmpty()) {
+                IconButton(onClick = { onQueryChange("") }) {
+                    Icon(Icons.Default.Close, contentDescription = "Очистить поиск")
+                }
+            }
+        },
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        singleLine = true
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CategoryFilterChips(
+    categories: List<CategoryEntity>,
+    selectedCategoryId: Long?,
+    onCategorySelected: (Long?) -> Unit
+) {
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        item {
+            FilterChip(
+                selected = selectedCategoryId == null,
+                onClick = { onCategorySelected(null) },
+                label = { Text(stringResource(R.string.all_categories)) }
+            )
+        }
+        items(categories) { category ->
+            FilterChip(
+                selected = selectedCategoryId == category.id,
+                onClick = {
+                    onCategorySelected(if (selectedCategoryId == category.id) null else category.id)
+                },
+                label = { Text(category.name) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun LowStockWarning(lowStockCount: Int) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp)
+            .background(MaterialTheme.colorScheme.errorContainer)
+            .padding(16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            Icons.Default.Warning,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.error
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = stringResource(R.string.low_stock_warning, lowStockCount),
+            color = MaterialTheme.colorScheme.error,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+@Composable
+private fun EmptyProductsMessage() {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Inventory2,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f),
+                modifier = Modifier.size(64.dp)
+            )
+            Text(
+                text = stringResource(R.string.empty_products),
+                fontSize = 18.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun DeleteProductDialog(
+    productName: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text(text = stringResource(R.string.confirm_delete_product, productName))
+        },
+        text = { Text(text = "Это действие нельзя отменить.") },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+            ) {
+                Text(
+                    text = stringResource(R.string.delete),
+                    color = MaterialTheme.colorScheme.onError
+                )
+            }
+        },
+        dismissButton = {
+            Button(onClick = onDismiss) {
+                Text(text = stringResource(R.string.cancel))
+            }
+        }
+    )
+}
+
 @Composable
 fun ProductItemCard(
     product: ProductEntity,
@@ -408,9 +440,6 @@ fun ProductItemCard(
     }
 }
 
-/**
- * Диалог добавления/редактирования товара с валидацией полей.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProductDialog(
@@ -437,7 +466,6 @@ fun ProductDialog(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Название
                 TextField(
                     value = name,
                     onValueChange = {
@@ -453,7 +481,6 @@ fun ProductDialog(
                     singleLine = true
                 )
 
-                // Выбор категории
                 if (categories.isNotEmpty()) {
                     Text(
                         text = stringResource(R.string.filter_category),
@@ -471,7 +498,6 @@ fun ProductDialog(
                     }
                 }
 
-                // Цена
                 TextField(
                     value = priceText,
                     onValueChange = {
@@ -487,7 +513,6 @@ fun ProductDialog(
                     singleLine = true
                 )
 
-                // Количество
                 TextField(
                     value = stockText,
                     onValueChange = {
@@ -507,7 +532,6 @@ fun ProductDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    // Валидация полей формы
                     val price = priceText.trim().toLongOrNull()
                     val stock = stockText.trim().toIntOrNull()
                     nameError = name.trim().isEmpty()

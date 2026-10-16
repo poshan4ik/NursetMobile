@@ -13,11 +13,6 @@ import com.nursetmobile.data.entity.OrderItemEntity
 import com.nursetmobile.data.entity.ProductEntity
 import kotlinx.coroutines.flow.first
 
-/**
- * Room Database для NursetMobile.
- * Содержит 4 таблицы: categories, products, orders, order_items.
- * Демоданные добавляются при первом запуске приложения (см. NursetApplication).
- */
 @Database(
     entities = [
         CategoryEntity::class,
@@ -51,7 +46,7 @@ abstract class AppDatabase : RoomDatabase() {
                         AppDatabase::class.java,
                         DATABASE_NAME
                     )
-                        .fallbackToDestructiveMigration() // Для разработки, в продакшене нужны миграции
+                        .fallbackToDestructiveMigration()
                         .build()
                     INSTANCE = newInstance
                     newInstance
@@ -59,30 +54,17 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
-        /**
-         * Заполняет базу демоданными, если она пуста (вызывается при первом запуске).
-         * Категории: Смартфоны, Ноутбуки, Аксессуары, Бытовая техника.
-         * Товары с ценами и остатками.
-         * Несколько заказов с разными статусами.
-         */
+        // Заполняет базу демоданными при первом запуске (категории, товары, заказы)
         suspend fun populateDemoDataIfEmpty(db: AppDatabase) {
-            // Проверяем, пустая ли база (демоданные добавляем только при самом первом запуске)
             val categoriesCount = db.categoryDao().getAll().first().size
             val ordersCount = db.orderDao().countOrders()
-            if (categoriesCount > 0 || ordersCount > 0) return // Уже есть данные
+            if (categoriesCount > 0 || ordersCount > 0) return
 
-            // 1. Категории
-            val catPhones = CategoryEntity("Смартфоны")
-            val catLaptops = CategoryEntity("Ноутбуки")
-            val catAccessories = CategoryEntity("Аксессуары")
-            val catAppliances = CategoryEntity("Бытовая техника")
+            val catPhonesId = db.categoryDao().insert(CategoryEntity("Смартфоны"))
+            val catLaptopsId = db.categoryDao().insert(CategoryEntity("Ноутбуки"))
+            val catAccessoriesId = db.categoryDao().insert(CategoryEntity("Аксессуары"))
+            val catAppliancesId = db.categoryDao().insert(CategoryEntity("Бытовая техника"))
 
-            val catPhonesId = db.categoryDao().insert(catPhones)
-            val catLaptopsId = db.categoryDao().insert(catLaptops)
-            val catAccessoriesId = db.categoryDao().insert(catAccessories)
-            val catAppliancesId = db.categoryDao().insert(catAppliances)
-
-            // 2. Товары
             val products = listOf(
                 ProductEntity("Samsung Galaxy S25", catPhonesId, 350000, 5),
                 ProductEntity("Redmi Note 14", catPhonesId, 120000, 10),
@@ -96,21 +78,18 @@ abstract class AppDatabase : RoomDatabase() {
             )
             products.forEach { db.productDao().insert(it) }
 
-            // 3. Демонстрационные заказы с разными статусами
-            // Заказ 1: NEW - Samsung Galaxy S25 (2 шт) + AirPods 4 (1 шт)
-            val order1 = OrderEntity(System.currentTimeMillis() - 86400000 * 5, 0, 0) // 5 дней назад, NEW
+            // Заказы с разными статусами; ID товаров указаны по порядку их добавления
+            val order1 = OrderEntity(System.currentTimeMillis() - 86400000 * 5, 0, 0)
             val order1Id = db.orderDao().insertOrder(order1)
             val items1 = listOf(
                 OrderItemEntity(order1Id, 1, "Samsung Galaxy S25", 350000, 2),
                 OrderItemEntity(order1Id, 4, "AirPods 4", 90000, 1)
             )
             db.orderDao().insertOrderItems(items1)
-            // Обновляем сумму заказа
             val total1 = items1.sumOf { it.price * it.quantity }
             db.orderDao().updateOrder(order1.copy(id = order1Id, totalPrice = total1))
 
-            // Заказ 2: PROCESSING - Redmi Note 14 (1 шт) + Power Bank (2 шт)
-            val order2 = OrderEntity(System.currentTimeMillis() - 86400000 * 3, 0, 1) // 3 дня назад, PROCESSING
+            val order2 = OrderEntity(System.currentTimeMillis() - 86400000 * 3, 0, 1)
             val order2Id = db.orderDao().insertOrder(order2)
             val items2 = listOf(
                 OrderItemEntity(order2Id, 2, "Redmi Note 14", 120000, 1),
@@ -120,8 +99,7 @@ abstract class AppDatabase : RoomDatabase() {
             val total2 = items2.sumOf { it.price * it.quantity }
             db.orderDao().updateOrder(order2.copy(id = order2Id, totalPrice = total2))
 
-            // Заказ 3: COMPLETED - iPhone 16 (1 шт)
-            val order3 = OrderEntity(System.currentTimeMillis() - 86400000 * 10, 0, 2) // 10 дней назад, COMPLETED
+            val order3 = OrderEntity(System.currentTimeMillis() - 86400000 * 10, 0, 2)
             val order3Id = db.orderDao().insertOrder(order3)
             val items3 = listOf(
                 OrderItemEntity(order3Id, 3, "iPhone 16", 450000, 1)
@@ -130,8 +108,7 @@ abstract class AppDatabase : RoomDatabase() {
             val total3 = items3.sumOf { it.price * it.quantity }
             db.orderDao().updateOrder(order3.copy(id = order3Id, totalPrice = total3))
 
-            // Заказ 4: CANCELLED - MacBook Air M3 (1 шт) — товары возвращены на склад
-            val order4 = OrderEntity(System.currentTimeMillis() - 86400000 * 7, 0, 3) // 7 дней назад, CANCELLED
+            val order4 = OrderEntity(System.currentTimeMillis() - 86400000 * 7, 0, 3)
             val order4Id = db.orderDao().insertOrder(order4)
             val items4 = listOf(
                 OrderItemEntity(order4Id, 6, "MacBook Air M3", 800000, 1)
@@ -139,16 +116,6 @@ abstract class AppDatabase : RoomDatabase() {
             db.orderDao().insertOrderItems(items4)
             val total4 = items4.sumOf { it.price * it.quantity }
             db.orderDao().updateOrder(order4.copy(id = order4Id, totalPrice = total4))
-
-            // Примечание: остатки товаров в демоданных уже учитывают списания за активные заказы (NEW, PROCESSING)
-            // COMPLETED и CANCELLED не держат товары на складе
         }
     }
-}
-
-/**
- * Конвертеры типов (пока пустые, на будущее).
- */
-class Converters {
-    // Можно добавить конвертеры для сложных типов при необходимости
 }

@@ -1,15 +1,18 @@
 package com.nursetmobile.viewmodel
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.nursetmobile.data.AppDatabase
-import com.nursetmobile.data.repository.ProductRepository
+import com.nursetmobile.data.entity.CategoryEntity
 import com.nursetmobile.data.entity.ProductEntity
+import com.nursetmobile.data.repository.ProductRepository
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -29,21 +32,19 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
     private val _selectedCategoryId = MutableStateFlow<Long?>(null)
     val selectedCategoryId: StateFlow<Long?> = _selectedCategoryId.asStateFlow()
 
-    val products: StateFlow<List<ProductEntity>> = combineQueryCategory()
+    val products: StateFlow<List<ProductEntity>> = combine(
+        _searchQuery,
+        _selectedCategoryId
+    ) { query, categoryId -> query to categoryId }
         .flatMapLatest { (query, categoryId) -> repository.searchAndFilter(query, categoryId) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val categories: StateFlow<List<com.nursetmobile.data.entity.CategoryEntity>> =
+    val categories: StateFlow<List<CategoryEntity>> =
         repository.allCategories
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val lowStockCount: StateFlow<Int> = repository.lowStockCount
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
-
-    private fun combineQueryCategory() = kotlinx.coroutines.flow.combine(
-        _searchQuery,
-        _selectedCategoryId
-    ) { query, categoryId -> Pair(query, categoryId) }
 
     fun onSearchQueryChange(query: String) {
         _searchQuery.value = query
@@ -51,11 +52,6 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
 
     fun onCategoryFilterChange(categoryId: Long?) {
         _selectedCategoryId.value = categoryId
-    }
-
-    fun clearFilters() {
-        _searchQuery.value = ""
-        _selectedCategoryId.value = null
     }
 
     fun addProduct(name: String, categoryId: Long, price: Long, stock: Int) {
@@ -92,7 +88,7 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
         _error.value = null
     }
 
-    class Factory(private val database: AppDatabase) : androidx.lifecycle.ViewModelProvider.Factory {
+    class Factory(private val database: AppDatabase) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             return ProductViewModel(ProductRepository.create(database)) as T

@@ -64,13 +64,9 @@ import com.nursetmobile.ui.formatPrice
 import com.nursetmobile.viewmodel.CartItem
 import com.nursetmobile.viewmodel.OrderViewModel
 
-/**
- * Экран создания нового заказа: корзина, выбор товаров, итог, создание.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CreateOrderScreen(
-    onTabClick: (Int) -> Unit,
     onBack: () -> Unit,
     viewModel: OrderViewModel = viewModel(
         factory = OrderViewModel.Factory(
@@ -94,7 +90,8 @@ fun CreateOrderScreen(
             viewModel.clearMessages()
         }
     }
-    // После успешного создания заказа показываем сообщение и возвращаемся назад
+
+    // После создания заказа показываем сообщение и возвращаемся назад
     LaunchedEffect(success) {
         success?.let { message ->
             snackbarHostState.showSnackbar(message)
@@ -134,118 +131,25 @@ fun CreateOrderScreen(
         }
     ) { innerPadding ->
         if (cartItems.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.ShoppingCart,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f),
-                        modifier = Modifier.size(64.dp)
-                    )
-                    Text(
-                        text = "Корзина пуста",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Text(
-                        text = "Нажмите «+» чтобы добавить товары",
-                        fontSize = 16.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Button(onClick = { showProductPicker = true }) {
-                        Text("Выбрать товары")
-                    }
-                }
-            }
+            EmptyCartView(
+                innerPadding = innerPadding,
+                onSelectProducts = { showProductPicker = true }
+            )
         } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .padding(16.dp),
-                contentPadding = PaddingValues(0.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(cartItems, key = { it.productId }) { item ->
-                    OrderCartItemCard(
-                        item = item,
-                        onQuantityChange = { newQty ->
-                            viewModel.updateCartItemQuantity(item.productId, newQty)
-                        },
-                        onRemove = { viewModel.removeFromCart(item.productId) }
-                    )
-                }
-
-                item {
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer
-                        )
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = stringResource(R.string.total),
-                                fontSize = 20.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = formatPrice(cartTotal),
-                                fontSize = 20.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                        }
-                    }
-                }
-
-                item {
-                    Button(
-                        onClick = { viewModel.createOrder() },
-                        enabled = !isLoading && cartItems.isNotEmpty(),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(56.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary
-                        )
-                    ) {
-                        if (isLoading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(24.dp),
-                                color = MaterialTheme.colorScheme.onPrimary
-                            )
-                        } else {
-                            Icon(Icons.Default.Check, contentDescription = null)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = stringResource(R.string.create_order),
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-                    }
-                }
-            }
+            CartContent(
+                cartItems = cartItems,
+                cartTotal = cartTotal,
+                isLoading = isLoading,
+                innerPadding = innerPadding,
+                onQuantityChange = { productId, quantity ->
+                    viewModel.updateCartItemQuantity(productId, quantity)
+                },
+                onRemove = { productId -> viewModel.removeFromCart(productId) },
+                onCreateOrder = { viewModel.createOrder() }
+            )
         }
     }
 
-    // Диалог выбора товара
     if (showProductPicker) {
         ProductPickerDialog(
             products = availableProducts,
@@ -258,9 +162,148 @@ fun CreateOrderScreen(
     }
 }
 
-/**
- * Карточка товара в корзине.
- */
+@Composable
+private fun EmptyCartView(
+    innerPadding: PaddingValues,
+    onSelectProducts: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(innerPadding),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.ShoppingCart,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f),
+                modifier = Modifier.size(64.dp)
+            )
+            Text(
+                text = "Корзина пуста",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                text = "Нажмите «+» чтобы добавить товары",
+                fontSize = 16.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Button(onClick = onSelectProducts) {
+                Text("Выбрать товары")
+            }
+        }
+    }
+}
+
+@Composable
+private fun CartContent(
+    cartItems: List<CartItem>,
+    cartTotal: Long,
+    isLoading: Boolean,
+    innerPadding: PaddingValues,
+    onQuantityChange: (productId: Long, quantity: Int) -> Unit,
+    onRemove: (productId: Long) -> Unit,
+    onCreateOrder: () -> Unit
+) {
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(innerPadding)
+            .padding(16.dp),
+        contentPadding = PaddingValues(0.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        items(cartItems, key = { it.productId }) { item ->
+            OrderCartItemCard(
+                item = item,
+                onQuantityChange = { newQuantity -> onQuantityChange(item.productId, newQuantity) },
+                onRemove = { onRemove(item.productId) }
+            )
+        }
+
+        item {
+            CartTotalCard(cartTotal = cartTotal)
+        }
+
+        item {
+            CreateOrderButton(
+                isLoading = isLoading,
+                enabled = !isLoading && cartItems.isNotEmpty(),
+                onClick = onCreateOrder
+            )
+        }
+    }
+}
+
+@Composable
+private fun CartTotalCard(cartTotal: Long) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = stringResource(R.string.total),
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = formatPrice(cartTotal),
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+        }
+    }
+}
+
+@Composable
+private fun CreateOrderButton(
+    isLoading: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    Button(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(56.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = MaterialTheme.colorScheme.primary
+        )
+    ) {
+        if (isLoading) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(24.dp),
+                color = MaterialTheme.colorScheme.onPrimary
+            )
+        } else {
+            Icon(Icons.Default.Check, contentDescription = null)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = stringResource(R.string.create_order),
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
+    }
+}
+
 @Composable
 fun OrderCartItemCard(
     item: CartItem,
@@ -317,9 +360,6 @@ fun OrderCartItemCard(
     }
 }
 
-/**
- * Счётчик количества товара.
- */
 @Composable
 fun QuantityCounter(
     quantity: Int,
@@ -346,9 +386,6 @@ fun QuantityCounter(
     }
 }
 
-/**
- * Диалог выбора товара для добавления в заказ.
- */
 @Composable
 fun ProductPickerDialog(
     products: List<ProductEntity>,

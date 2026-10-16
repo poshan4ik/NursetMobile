@@ -57,14 +57,10 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/**
- * Экран деталей заказа: позиции, сумма, управление статусом.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun OrderDetailsScreen(
     orderId: Long,
-    onTabClick: (Int) -> Unit,
     onBack: () -> Unit,
     viewModel: OrderViewModel = viewModel(
         factory = OrderViewModel.Factory(
@@ -84,7 +80,7 @@ fun OrderDetailsScreen(
         }
     }
 
-    // Загрузка данных заказа; повторная загрузка после успешного изменения статуса
+    // Данные заказа перезагружаем после каждого успешного изменения статуса
     var orderData by remember {
         mutableStateOf<Pair<OrderEntity?, List<OrderItemEntity>>?>(null)
     }
@@ -96,7 +92,6 @@ fun OrderDetailsScreen(
         }
     }
 
-    // Состояние диалога подтверждения отмены заказа
     var showCancelDialog by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -164,7 +159,6 @@ fun OrderDetailsScreen(
         }
     }
 
-    // Диалог подтверждения отмены заказа
     if (showCancelDialog) {
         AlertDialog(
             onDismissRequest = { showCancelDialog = false },
@@ -199,9 +193,6 @@ fun OrderDetailsScreen(
     }
 }
 
-/**
- * Содержимое экрана деталей заказа.
- */
 @Composable
 private fun OrderDetailsContent(
     order: OrderEntity,
@@ -211,8 +202,6 @@ private fun OrderDetailsContent(
     onCancelRequest: () -> Unit
 ) {
     val status = OrderStatus.fromValue(order.status)
-    val dateStr =
-        SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date(order.createdAt))
 
     Column(
         modifier = Modifier
@@ -221,178 +210,197 @@ private fun OrderDetailsContent(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Карточка заказа
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant
-            )
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = stringResource(R.string.order_number_format, order.id),
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    StatusChip(status = status)
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Дата: $dateStr",
-                    fontSize = 14.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
+        OrderInfoCard(order = order, status = status)
 
-        // Позиции заказа
-        if (orderItems.isNotEmpty()) {
-            Text(
-                text = "Позиции заказа",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Medium
-            )
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
-                contentPadding = PaddingValues(vertical = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(orderItems, key = { it.id }) { item ->
-                    OrderDetailItemCard(item = item)
-                }
-            }
-        } else {
-            Spacer(modifier = Modifier.weight(1f))
-        }
+        OrderItemsList(orderItems = orderItems, modifier = Modifier.weight(1f))
 
-        // Итого
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer
-            )
-        ) {
+        OrderTotalCard(totalPrice = order.totalPrice)
+
+        StatusActionButtons(
+            status = status,
+            onStatusChange = onStatusChange,
+            onCancelRequest = onCancelRequest
+        )
+    }
+}
+
+@Composable
+private fun OrderInfoCard(order: OrderEntity, status: OrderStatus) {
+    val dateText =
+        SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date(order.createdAt))
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
+                modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = stringResource(R.string.total),
+                    text = stringResource(R.string.order_number_format, order.id),
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold
                 )
-                Text(
-                    text = formatPrice(order.totalPrice),
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                )
+                StatusChip(status = status)
             }
-        }
-
-        // Управление статусом активного заказа
-        when (status) {
-            OrderStatus.NEW -> {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Button(
-                        onClick = { onStatusChange(OrderStatus.PROCESSING) },
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(48.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary
-                        )
-                    ) {
-                        Text(
-                            stringResource(R.string.action_process),
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                    Button(
-                        onClick = onCancelRequest,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(48.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer
-                        )
-                    ) {
-                        Text(
-                            stringResource(R.string.action_cancel),
-                            color = MaterialTheme.colorScheme.error
-                        )
-                    }
-                }
-            }
-
-            OrderStatus.PROCESSING -> {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Button(
-                        onClick = { onStatusChange(OrderStatus.COMPLETED) },
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(48.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.tertiary
-                        )
-                    ) {
-                        Text(
-                            stringResource(R.string.action_complete),
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                    Button(
-                        onClick = onCancelRequest,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(48.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.errorContainer
-                        )
-                    ) {
-                        Text(
-                            stringResource(R.string.action_cancel),
-                            color = MaterialTheme.colorScheme.error
-                        )
-                    }
-                }
-            }
-
-            OrderStatus.COMPLETED, OrderStatus.CANCELLED -> {
-                Text(
-                    text = if (status == OrderStatus.COMPLETED) "Заказ выполнен"
-                    else "Заказ отменён",
-                    fontSize = 16.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(8.dp)
-                )
-            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Дата: $dateText",
+                fontSize = 14.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
 
-/**
- * Карточка позиции заказа.
- */
+@Composable
+private fun OrderItemsList(orderItems: List<OrderItemEntity>, modifier: Modifier) {
+    if (orderItems.isEmpty()) {
+        Spacer(modifier = modifier)
+        return
+    }
+
+    Text(
+        text = "Позиции заказа",
+        fontSize = 18.sp,
+        fontWeight = FontWeight.Medium
+    )
+    LazyColumn(
+        modifier = modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        items(orderItems, key = { it.id }) { item ->
+            OrderDetailItemCard(item = item)
+        }
+    }
+}
+
+@Composable
+private fun OrderTotalCard(totalPrice: Long) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = stringResource(R.string.total),
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = formatPrice(totalPrice),
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onPrimaryContainer
+            )
+        }
+    }
+}
+
+@Composable
+private fun StatusActionButtons(
+    status: OrderStatus,
+    onStatusChange: (OrderStatus) -> Unit,
+    onCancelRequest: () -> Unit
+) {
+    when (status) {
+        OrderStatus.NEW -> {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = { onStatusChange(OrderStatus.PROCESSING) },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary
+                    )
+                ) {
+                    Text(
+                        stringResource(R.string.action_process),
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+                CancelButton(
+                    onClick = onCancelRequest,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+
+        OrderStatus.PROCESSING -> {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = { onStatusChange(OrderStatus.COMPLETED) },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.tertiary
+                    )
+                ) {
+                    Text(
+                        stringResource(R.string.action_complete),
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+                CancelButton(
+                    onClick = onCancelRequest,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+
+        OrderStatus.COMPLETED, OrderStatus.CANCELLED -> {
+            Text(
+                text = if (status == OrderStatus.COMPLETED) "Заказ выполнен"
+                else "Заказ отменён",
+                fontSize = 16.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(8.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun CancelButton(onClick: () -> Unit, modifier: Modifier) {
+    Button(
+        onClick = onClick,
+        modifier = modifier.height(48.dp),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer
+        )
+    ) {
+        Text(
+            stringResource(R.string.action_cancel),
+            color = MaterialTheme.colorScheme.error
+        )
+    }
+}
+
 @Composable
 fun OrderDetailItemCard(item: OrderItemEntity) {
     Card(modifier = Modifier.fillMaxWidth()) {

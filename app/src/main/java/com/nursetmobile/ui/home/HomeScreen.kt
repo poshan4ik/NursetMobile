@@ -37,9 +37,6 @@ import com.nursetmobile.NursetApplication
 import com.nursetmobile.R
 import com.nursetmobile.viewmodel.HomeViewModel
 
-/**
- * Главный экран: статистика и быстрые переходы.
- */
 @Composable
 fun HomeScreen(
     onTabClick: (Int) -> Unit,

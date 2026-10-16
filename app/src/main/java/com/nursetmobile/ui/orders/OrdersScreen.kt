@@ -56,13 +56,9 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/**
- * Экран списка заказов.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun OrdersScreen(
-    onTabClick: (Int) -> Unit,
     onCreateOrder: () -> Unit,
     onOrderClick: (Long) -> Unit,
     viewModel: OrderViewModel = viewModel(
@@ -175,9 +171,6 @@ fun OrdersScreen(
     }
 }
 
-/**
- * Элемент списка заказов.
- */
 @Composable
 fun OrderListItem(
     order: OrderEntity,

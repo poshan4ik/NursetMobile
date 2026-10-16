@@ -54,13 +54,9 @@ import com.nursetmobile.R
 import com.nursetmobile.data.entity.CategoryEntity
 import com.nursetmobile.viewmodel.CategoryViewModel
 
-/**
- * Экран списка категорий: просмотр, добавление, редактирование, удаление.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CategoriesScreen(
-    onTabClick: (Int) -> Unit,
     viewModel: CategoryViewModel = viewModel(
         factory = CategoryViewModel.Factory(
             (LocalContext.current.applicationContext as NursetApplication).database
@@ -79,7 +75,6 @@ fun CategoriesScreen(
         }
     }
 
-    // Состояния диалогов
     var showAddDialog by remember { mutableStateOf(false) }
     var editingCategory by remember { mutableStateOf<CategoryEntity?>(null) }
     var deletingCategory by remember { mutableStateOf<CategoryEntity?>(null) }
@@ -148,7 +143,6 @@ fun CategoriesScreen(
         }
     }
 
-    // Диалог добавления категории
     if (showAddDialog) {
         CategoryDialog(
             title = stringResource(R.string.add),
@@ -161,7 +155,6 @@ fun CategoriesScreen(
         )
     }
 
-    // Диалог редактирования категории
     editingCategory?.let { category ->
         CategoryDialog(
             title = stringResource(R.string.edit),
@@ -174,7 +167,6 @@ fun CategoriesScreen(
         )
     }
 
-    // Диалог подтверждения удаления категории
     deletingCategory?.let { category ->
         AlertDialog(
             onDismissRequest = { deletingCategory = null },
@@ -205,9 +197,6 @@ fun CategoriesScreen(
     }
 }
 
-/**
- * Карточка категории в списке.
- */
 @Composable
 fun CategoryItemCard(
     category: CategoryEntity,
@@ -250,9 +239,6 @@ fun CategoryItemCard(
     }
 }
 
-/**
- * Диалог добавления/редактирования категории.
- */
 @Composable
 fun CategoryDialog(
     title: String,

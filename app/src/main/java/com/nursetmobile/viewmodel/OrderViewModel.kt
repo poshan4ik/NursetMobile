@@ -1,6 +1,7 @@
 package com.nursetmobile.viewmodel
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.nursetmobile.data.AppDatabase
 import com.nursetmobile.data.repository.OrderRepository
@@ -168,7 +169,7 @@ class OrderViewModel(private val repository: OrderRepository) : ViewModel() {
         _success.value = null
     }
 
-    class Factory(private val database: AppDatabase) : androidx.lifecycle.ViewModelProvider.Factory {
+    class Factory(private val database: AppDatabase) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
             return OrderViewModel(OrderRepository.create(database)) as T
