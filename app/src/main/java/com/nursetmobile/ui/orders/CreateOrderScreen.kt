@@ -184,17 +184,17 @@ private fun EmptyCartView(
                 modifier = Modifier.size(64.dp)
             )
             Text(
-                text = "Корзина пуста",
+                text = stringResource(R.string.cart_empty),
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Medium
             )
             Text(
-                text = "Нажмите «+» чтобы добавить товары",
+                text = stringResource(R.string.cart_empty_hint),
                 fontSize = 16.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Button(onClick = onSelectProducts) {
-                Text("Выбрать товары")
+                Text(stringResource(R.string.select_products))
             }
         }
     }
@@ -305,7 +305,7 @@ private fun CreateOrderButton(
 }
 
 @Composable
-fun OrderCartItemCard(
+private fun OrderCartItemCard(
     item: CartItem,
     onQuantityChange: (Int) -> Unit,
     onRemove: () -> Unit
@@ -361,7 +361,7 @@ fun OrderCartItemCard(
 }
 
 @Composable
-fun QuantityCounter(
+private fun QuantityCounter(
     quantity: Int,
     maxQuantity: Int,
     onDecrease: () -> Unit,
@@ -372,7 +372,7 @@ fun QuantityCounter(
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         IconButton(onClick = onDecrease, enabled = quantity > 1) {
-            Icon(Icons.Default.Remove, contentDescription = "Уменьшить")
+            Icon(Icons.Default.Remove, contentDescription = stringResource(R.string.decrease))
         }
         Text(
             text = quantity.toString(),
@@ -381,13 +381,13 @@ fun QuantityCounter(
             modifier = Modifier.width(32.dp)
         )
         IconButton(onClick = onIncrease, enabled = quantity < maxQuantity) {
-            Icon(Icons.Default.Add, contentDescription = "Увеличить")
+            Icon(Icons.Default.Add, contentDescription = stringResource(R.string.increase))
         }
     }
 }
 
 @Composable
-fun ProductPickerDialog(
+private fun ProductPickerDialog(
     products: List<ProductEntity>,
     onProductClick: (ProductEntity) -> Unit,
     onDismiss: () -> Unit
@@ -402,7 +402,7 @@ fun ProductPickerDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(text = "Выбрать товар") },
+        title = { Text(text = stringResource(R.string.select_product)) },
         text = {
             Column(
                 modifier = Modifier
@@ -412,7 +412,7 @@ fun ProductPickerDialog(
                 TextField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
-                    placeholder = { Text("Поиск по названию...") },
+                    placeholder = { Text(stringResource(R.string.search_hint)) },
                     leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
@@ -420,7 +420,7 @@ fun ProductPickerDialog(
                 Spacer(modifier = Modifier.height(8.dp))
                 if (filteredProducts.isEmpty()) {
                     Text(
-                        text = "Товары не найдены",
+                        text = stringResource(R.string.no_products_found),
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(16.dp)
@@ -446,7 +446,10 @@ fun ProductPickerDialog(
                                         fontWeight = FontWeight.Medium
                                     )
                                     Text(
-                                        text = "${formatPrice(product.price)} | Остаток: ${product.stock} шт.",
+                                        text = stringResource(
+                                            R.string.product_price_and_stock,
+                                            formatPrice(product.price), product.stock
+                                        ),
                                         fontSize = 12.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )

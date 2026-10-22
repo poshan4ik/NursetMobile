@@ -83,8 +83,7 @@ fun NursetNavHost(
                                 text = stringResource(tab.label),
                                 fontSize = 12.sp
                             )
-                        },
-                        alwaysShowLabel = true
+                        }
                     )
                 }
             }

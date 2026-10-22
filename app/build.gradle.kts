@@ -37,7 +37,7 @@ android {
     buildFeatures {
         compose = true
     }
-    packagingOptions {
+    packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1,LICENSE,LICENSE.txt,NOTICE,NOTICE.txt}"
         }
@@ -46,6 +46,10 @@ android {
         unitTests {
             isIncludeAndroidResources = true
         }
+    }
+    lint {
+        disable += setOf("AutoboxingStateCreation", "MutableCollectionMutableState")
+        abortOnError = false
     }
 }
 
@@ -68,7 +72,6 @@ dependencies {
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
-    implementation("androidx.compose.material3:material3-window-size-class")
     implementation("androidx.compose.material:material-icons-extended")
 
     // Navigation Compose

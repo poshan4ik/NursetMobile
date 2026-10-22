@@ -205,7 +205,7 @@ private fun ProductSearchBar(
         trailingIcon = {
             if (searchQuery.isNotEmpty()) {
                 IconButton(onClick = { onQueryChange("") }) {
-                    Icon(Icons.Default.Close, contentDescription = "Очистить поиск")
+                    Icon(Icons.Default.Close, contentDescription = stringResource(R.string.clear_search))
                 }
             }
         },
@@ -306,7 +306,7 @@ private fun DeleteProductDialog(
         title = {
             Text(text = stringResource(R.string.confirm_delete_product, productName))
         },
-        text = { Text(text = "Это действие нельзя отменить.") },
+        text = { Text(text = stringResource(R.string.irreversible_action)) },
         confirmButton = {
             Button(
                 onClick = onConfirm,
@@ -327,7 +327,7 @@ private fun DeleteProductDialog(
 }
 
 @Composable
-fun ProductItemCard(
+private fun ProductItemCard(
     product: ProductEntity,
     onEdit: () -> Unit,
     onDelete: () -> Unit
@@ -383,12 +383,12 @@ fun ProductItemCard(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(
-                    text = "Цена: ${formatPrice(product.price)}",
+                    text = stringResource(R.string.price_with_value, formatPrice(product.price)),
                     fontSize = 14.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = "Остаток: ${product.stock} шт.",
+                    text = stringResource(R.string.stock_with_value, product.stock),
                     fontSize = 14.sp,
                     color = if (isOutOfStock || isLowStock) MaterialTheme.colorScheme.error
                     else MaterialTheme.colorScheme.onSurfaceVariant,
@@ -410,7 +410,7 @@ fun ProductItemCard(
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "⚠ Осталось ${product.stock} шт.",
+                        text = stringResource(R.string.low_stock_warning, product.stock),
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.error
                     )
@@ -429,7 +429,7 @@ fun ProductItemCard(
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "Нет в наличии",
+                        text = stringResource(R.string.out_of_stock),
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.error,
                         fontWeight = FontWeight.Bold
@@ -442,7 +442,7 @@ fun ProductItemCard(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ProductDialog(
+private fun ProductDialog(
     title: String,
     initial: ProductEntity?,
     categories: List<CategoryEntity>,
@@ -472,7 +472,7 @@ fun ProductDialog(
                         name = it
                         nameError = false
                     },
-                    label = { Text("Название") },
+                    label = { Text(stringResource(R.string.name_label)) },
                     isError = nameError,
                     supportingText = if (nameError) {
                         { Text(stringResource(R.string.error_empty_name)) }

@@ -81,6 +81,38 @@ class CategoryRepositoryTest {
     }
 
     @Test
+    fun `обновление категории с пустым именем — ошибка`() = runBlocking {
+        val id = repository.addCategory("Категория").getOrThrow()
+        val result = repository.updateCategory(id, "   ")
+        assertFalse(result.isSuccess)
+        assertEquals("Название не может быть пустым.", result.exceptionOrNull()?.message)
+    }
+
+    @Test
+    fun `обновление несуществующей категории — ошибка`() = runBlocking {
+        val result = repository.updateCategory(999999, "Категория")
+        assertFalse(result.isSuccess)
+        assertEquals("Категория не найдена.", result.exceptionOrNull()?.message)
+    }
+
+    @Test
+    fun `обновление категории в дубликат другой категории — ошибка`() = runBlocking {
+        repository.addCategory("Первая")
+        val secondId = repository.addCategory("Вторая").getOrThrow()
+
+        val result = repository.updateCategory(secondId, "первая")
+        assertFalse(result.isSuccess)
+        assertEquals("Категория с таким названием уже существует.", result.exceptionOrNull()?.message)
+    }
+
+    @Test
+    fun `обновление категории с тем же именем разрешено`() = runBlocking {
+        val id = repository.addCategory("Категория").getOrThrow()
+        val result = repository.updateCategory(id, "Категория")
+        assertTrue(result.isSuccess)
+    }
+
+    @Test
     fun `удаление пустой категории успешно`() = runBlocking {
         val addResult = repository.addCategory("Для удаления")
         val id = addResult.getOrThrow()

@@ -172,7 +172,7 @@ fun CategoriesScreen(
             title = {
                 Text(text = stringResource(R.string.confirm_delete_category, category.name))
             },
-            text = { Text(text = "Это действие нельзя отменить.") },
+            text = { Text(text = stringResource(R.string.irreversible_action)) },
             confirmButton = {
                 Button(
                     onClick = {
@@ -197,7 +197,7 @@ fun CategoriesScreen(
 }
 
 @Composable
-fun CategoryItemCard(
+private fun CategoryItemCard(
     category: CategoryEntity,
     onEdit: () -> Unit,
     onDelete: () -> Unit
@@ -239,7 +239,7 @@ fun CategoryItemCard(
 }
 
 @Composable
-fun CategoryDialog(
+private fun CategoryDialog(
     title: String,
     initialText: String,
     onConfirm: (String) -> Unit,
@@ -254,7 +254,7 @@ fun CategoryDialog(
             TextField(
                 value = text,
                 onValueChange = { text = it },
-                label = { Text("Название категории") },
+                label = { Text(stringResource(R.string.category_name_label)) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
             )

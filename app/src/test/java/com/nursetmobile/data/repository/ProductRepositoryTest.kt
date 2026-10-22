@@ -163,4 +163,100 @@ class ProductRepositoryTest {
         assertEquals(2, results.size)
         assertTrue(results.any { it.name.contains("iPhone") })
     }
+
+    @Test
+    fun `фильтр по категории без поиска`() = runBlocking {
+        val otherCategory = database.categoryDao().insert(CategoryEntity("Другая категория"))
+        repository.addProduct("Товар A", categoryId, 1000, 5)
+        repository.addProduct("Товар B", otherCategory, 2000, 3)
+
+        val results = repository.searchAndFilter("", otherCategory).first()
+        assertEquals(1, results.size)
+        assertEquals("Товар B", results[0].name)
+    }
+
+    @Test
+    fun `поиск с фильтром по категории одновременно`() = runBlocking {
+        val otherCategory = database.categoryDao().insert(CategoryEntity("Другая категория"))
+        repository.addProduct("iPhone 15", categoryId, 1000, 5)
+        repository.addProduct("iPhone 14", categoryId, 1500, 2)
+        repository.addProduct("iPhone 13", otherCategory, 1300, 4)
+
+        val results = repository.searchAndFilter("iPhone", categoryId).first()
+        assertEquals(2, results.size)
+        assertTrue(results.all { it.categoryId == categoryId })
+    }
+
+    @Test
+    fun `lowStockCount считает товары с остатком от 1 до 3`() = runBlocking {
+        repository.addProduct("Пустой", categoryId, 1000, 0)   // не в счёте
+        repository.addProduct("Норм", categoryId, 1000, 10)   // не в счёте
+        repository.addProduct("Мало 1", categoryId, 1000, 1)  // в счёте
+        repository.addProduct("Мало 3", categoryId, 1000, 3)  // в счёте
+
+        assertEquals(2, repository.lowStockCount.first())
+    }
+
+    @Test
+    fun `обновление товара с пустым именем — ошибка`() = runBlocking {
+        val id = repository.addProduct("Товар", categoryId, 1000, 5).getOrThrow()
+        val result = repository.updateProduct(id, "  ", categoryId, 1000, 5)
+        assertFalse(result.isSuccess)
+        assertEquals("Название не может быть пустым.", result.exceptionOrNull()?.message)
+    }
+
+    @Test
+    fun `обновление товара с нулевой ценой — ошибка`() = runBlocking {
+        val id = repository.addProduct("Товар", categoryId, 1000, 5).getOrThrow()
+        val result = repository.updateProduct(id, "Товар", categoryId, 0, 5)
+        assertFalse(result.isSuccess)
+        assertEquals("Цена должна быть больше нуля.", result.exceptionOrNull()?.message)
+    }
+
+    @Test
+    fun `обновление товара с отрицательным остатком — ошибка`() = runBlocking {
+        val id = repository.addProduct("Товар", categoryId, 1000, 5).getOrThrow()
+        val result = repository.updateProduct(id, "Товар", categoryId, 1000, -2)
+        assertFalse(result.isSuccess)
+        assertEquals("Количество не может быть отрицательным.", result.exceptionOrNull()?.message)
+    }
+
+    @Test
+    fun `обновление несуществующего товара — ошибка`() = runBlocking {
+        val result = repository.updateProduct(999999, "Товар", categoryId, 1000, 5)
+        assertFalse(result.isSuccess)
+        assertEquals("Товар не найден.", result.exceptionOrNull()?.message)
+    }
+
+    @Test
+    fun `обновление товара в несуществующую категорию — ошибка`() = runBlocking {
+        val id = repository.addProduct("Товар", categoryId, 1000, 5).getOrThrow()
+        val result = repository.updateProduct(id, "Товар", 999999, 1000, 5)
+        assertFalse(result.isSuccess)
+        assertEquals("Категория не найдена.", result.exceptionOrNull()?.message)
+    }
+
+    @Test
+    fun `обновление товара в дубликат названия другого товара — ошибка`() = runBlocking {
+        repository.addProduct("Первый", categoryId, 1000, 5)
+        val secondId = repository.addProduct("Второй", categoryId, 2000, 5).getOrThrow()
+
+        val result = repository.updateProduct(secondId, "первый", categoryId, 2000, 5)
+        assertFalse(result.isSuccess)
+        assertEquals(
+            "Товар с таким названием уже существует в этой категории.",
+            result.exceptionOrNull()?.message
+        )
+    }
+
+    @Test
+    fun `обновление товара с тем же именем разрешено`() = runBlocking {
+        val id = repository.addProduct("Товар", categoryId, 1000, 5).getOrThrow()
+        val result = repository.updateProduct(id, "Товар", categoryId, 1500, 7)
+        assertTrue(result.isSuccess)
+
+        val updated = database.productDao().getById(id)
+        assertEquals(1500L, updated?.price)
+        assertEquals(7, updated?.stock)
+    }
 }

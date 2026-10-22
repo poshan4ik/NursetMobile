@@ -97,15 +97,15 @@ fun HomeScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            QuickNavButton("Перейти к товарам", Icons.Default.Inventory2) { onTabClick(1) }
-            QuickNavButton("Перейти к категориям", Icons.Default.Category) { onTabClick(2) }
-            QuickNavButton("Перейти к заказам", Icons.Default.ReceiptLong) { onTabClick(3) }
+            QuickNavButton(stringResource(R.string.go_to_products), Icons.Default.Inventory2) { onTabClick(1) }
+            QuickNavButton(stringResource(R.string.go_to_categories), Icons.Default.Category) { onTabClick(2) }
+            QuickNavButton(stringResource(R.string.go_to_orders), Icons.Default.ReceiptLong) { onTabClick(3) }
         }
     }
 }
 
 @Composable
-fun StatCard(
+private fun StatCard(
     title: String,
     icon: ImageVector,
     color: Color
@@ -131,7 +131,7 @@ fun StatCard(
 }
 
 @Composable
-fun QuickNavButton(text: String, icon: ImageVector, onClick: () -> Unit) {
+private fun QuickNavButton(text: String, icon: ImageVector, onClick: () -> Unit) {
     Button(
         onClick = onClick,
         modifier = Modifier.fillMaxWidth(),

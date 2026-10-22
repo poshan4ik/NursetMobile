@@ -102,7 +102,7 @@ fun OrdersScreen(
                 actions = {
                     if (ordersCount > 0) {
                         Text(
-                            text = "Заказов: $ordersCount",
+                            text = stringResource(R.string.orders_count, ordersCount),
                             fontSize = 14.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(end = 16.dp)
@@ -172,7 +172,7 @@ fun OrdersScreen(
 }
 
 @Composable
-fun OrderListItem(
+private fun OrderListItem(
     order: OrderEntity,
     onClick: () -> Unit
 ) {

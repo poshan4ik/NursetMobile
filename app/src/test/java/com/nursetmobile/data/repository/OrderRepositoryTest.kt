@@ -230,6 +230,20 @@ class OrderRepositoryTest {
     }
 
     @Test
+    fun `отмена несуществующего заказа — ошибка`() = runBlocking {
+        val result = repository.cancelOrder(999999)
+        assertFalse(result.isSuccess)
+        assertEquals("Заказ не найден.", result.exceptionOrNull()?.message)
+    }
+
+    @Test
+    fun `смена статуса несуществующего заказа — ошибка`() = runBlocking {
+        val result = repository.updateOrderStatus(999999, OrderStatus.PROCESSING)
+        assertFalse(result.isSuccess)
+        assertEquals("Заказ не найден.", result.exceptionOrNull()?.message)
+    }
+
+    @Test
     fun `недопустимый переход статуса — ошибка`() = runBlocking {
         val items = listOf(OrderItemInput(product1Id, 1, 1000))
         val createResult = repository.createOrder(items)

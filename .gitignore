@@ -19,6 +19,10 @@ out/
 .DS_Store
 Thumbs.db
 
+# Kotlin compiler caches
+.kotlin/
+captures/
+
 # IntelliJ inspection dumps at project root (accidental export)
 /*.xml
 /.descriptions.xml

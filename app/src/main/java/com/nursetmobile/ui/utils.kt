@@ -11,9 +11,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nursetmobile.domain.OrderStatus
+import java.util.Locale
 
+// Locale.US нужен, чтобы разделитель групп всегда был запятой и заменялся на пробел
 fun formatPrice(price: Long): String {
-    return "%,d ₸".format(price).replace(',', ' ')
+    return String.format(Locale.US, "%,d ₸", price).replace(',', ' ')
 }
 
 @Composable

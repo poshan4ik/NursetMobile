@@ -37,8 +37,7 @@ interface OrderDao {
     @Transaction
     suspend fun createOrderWithItems(order: OrderEntity, items: List<OrderItemEntity>): Long {
         val orderId = insertOrder(order)
-        items.forEach { it.orderId = orderId }
-        insertOrderItems(items)
+        insertOrderItems(items.map { it.copy(orderId = orderId) })
         return orderId
     }
 

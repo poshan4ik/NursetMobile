@@ -140,7 +140,7 @@ fun OrderDetailsScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "Заказ не найден",
+                        text = stringResource(R.string.order_not_found),
                         fontSize = 16.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -167,7 +167,7 @@ fun OrderDetailsScreen(
                     text = stringResource(R.string.confirm_cancel_order, orderId)
                 )
             },
-            text = { Text(text = "Товары вернутся на склад. Это действие нельзя отменить.") },
+            text = { Text(text = stringResource(R.string.cancel_order_warning)) },
             confirmButton = {
                 Button(
                     onClick = {
@@ -250,7 +250,7 @@ private fun OrderInfoCard(order: OrderEntity, status: OrderStatus) {
             }
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "Дата: $dateText",
+                text = stringResource(R.string.date_with_value, dateText),
                 fontSize = 14.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -266,7 +266,7 @@ private fun OrderItemsList(orderItems: List<OrderItemEntity>, modifier: Modifier
     }
 
     Text(
-        text = "Позиции заказа",
+        text = stringResource(R.string.order_items),
         fontSize = 18.sp,
         fontWeight = FontWeight.Medium
     )
@@ -373,8 +373,8 @@ private fun StatusActionButtons(
 
         OrderStatus.COMPLETED, OrderStatus.CANCELLED -> {
             Text(
-                text = if (status == OrderStatus.COMPLETED) "Заказ выполнен"
-                else "Заказ отменён",
+                text = if (status == OrderStatus.COMPLETED) stringResource(R.string.message_order_completed)
+                else stringResource(R.string.message_order_cancelled),
                 fontSize = 16.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier
@@ -402,7 +402,7 @@ private fun CancelButton(onClick: () -> Unit, modifier: Modifier) {
 }
 
 @Composable
-fun OrderDetailItemCard(item: OrderItemEntity) {
+private fun OrderDetailItemCard(item: OrderItemEntity) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
@@ -421,21 +421,11 @@ fun OrderDetailItemCard(item: OrderItemEntity) {
                 )
             }
             Spacer(modifier = Modifier.height(4.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = "${formatPrice(item.price)} × ${item.quantity}",
-                    fontSize = 14.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = formatPrice(item.price * item.quantity),
-                    fontSize = 14.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            Text(
+                text = "${formatPrice(item.price)} × ${item.quantity}",
+                fontSize = 14.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
