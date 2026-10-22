@@ -21,14 +21,11 @@ class ProductRepository(
     val allCategories: Flow<List<CategoryEntity>> = categoryDao.getAll()
 
     fun searchAndFilter(query: String, categoryId: Long?): Flow<List<ProductEntity>> {
-        return if (query.trim().isNotEmpty() && categoryId != null) {
-            productDao.searchByNameAndCategory(query, categoryId)
-        } else if (query.trim().isNotEmpty()) {
-            productDao.searchByName(query)
-        } else if (categoryId != null) {
-            productDao.getByCategory(categoryId)
-        } else {
-            allProducts
+        val products = if (categoryId != null) productDao.getByCategory(categoryId) else allProducts
+        val trimmedQuery = query.trim()
+        // SQLite LIKE не учитывает регистр кириллицы; Kotlin корректно ищет русские названия.
+        return if (trimmedQuery.isEmpty()) products else products.map { list ->
+            list.filter { it.name.contains(trimmedQuery, ignoreCase = true) }
         }
     }
 

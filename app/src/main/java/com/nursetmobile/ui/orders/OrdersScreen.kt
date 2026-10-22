@@ -68,7 +68,7 @@ fun OrdersScreen(
     )
 ) {
     val orders by viewModel.orders.collectAsStateWithLifecycle()
-    val ordersCount by viewModel.ordersCount.collectAsStateWithLifecycle()
+    val ordersCount = orders.size
     val error by viewModel.error.collectAsStateWithLifecycle()
     val success by viewModel.success.collectAsStateWithLifecycle()
 
@@ -157,7 +157,7 @@ fun OrdersScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding),
-                contentPadding = PaddingValues(16.dp),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 88.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(orders, key = { it.id }) { order ->
@@ -172,7 +172,7 @@ fun OrdersScreen(
 }
 
 @Composable
-private fun OrderListItem(
+internal fun OrderListItem(
     order: OrderEntity,
     onClick: () -> Unit
 ) {
@@ -201,6 +201,7 @@ private fun OrderListItem(
 
             Spacer(modifier = Modifier.height(4.dp))
 
+            if (order.clientName.isNotBlank()) Text(order.clientName)
             Text(
                 text = dateStr,
                 fontSize = 12.sp,

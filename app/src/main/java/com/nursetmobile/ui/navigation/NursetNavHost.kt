@@ -4,6 +4,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.People
+import com.nursetmobile.ui.clients.ClientsScreen
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material3.Icon
@@ -41,7 +43,8 @@ fun NursetNavHost(
         TabItem(R.string.home, Icons.Default.Home, "home"),
         TabItem(R.string.products, Icons.Default.Inventory2, "products"),
         TabItem(R.string.categories, Icons.Default.Category, "categories"),
-        TabItem(R.string.orders, Icons.Default.ReceiptLong, "orders")
+        TabItem(R.string.orders, Icons.Default.ReceiptLong, "orders"),
+        TabItem(R.string.clients, Icons.Default.People, "clients")
     )
 
     // Какая вкладка выбрана: определяется по текущему маршруту
@@ -102,6 +105,9 @@ fun NursetNavHost(
             }
             composable("categories") {
                 CategoriesScreen()
+            }
+            composable("clients") {
+                ClientsScreen(onOrderClick = { navController.navigate("order_details/$it") })
             }
             composable("orders") {
                 OrdersScreen(

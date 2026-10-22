@@ -39,6 +39,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -80,6 +81,9 @@ fun CreateOrderScreen(
     val error by viewModel.error.collectAsStateWithLifecycle()
     val success by viewModel.success.collectAsStateWithLifecycle()
     val availableProducts by viewModel.availableProducts.collectAsStateWithLifecycle()
+    val clients by viewModel.clients.collectAsStateWithLifecycle()
+    val selectedClientId by viewModel.selectedClientId.collectAsStateWithLifecycle()
+    var showClientPicker by remember { mutableStateOf(false) }
 
     val snackbarHostState = remember { SnackbarHostState() }
     var showProductPicker by remember { mutableStateOf(false) }
@@ -145,9 +149,30 @@ fun CreateOrderScreen(
                     viewModel.updateCartItemQuantity(productId, quantity)
                 },
                 onRemove = { productId -> viewModel.removeFromCart(productId) },
-                onCreateOrder = { viewModel.createOrder() }
+                onCreateOrder = { viewModel.createOrder() },
+                clientName = clients.find { it.id == selectedClientId }?.name,
+                onSelectClient = { showClientPicker = true }
             )
         }
+    }
+
+    if (showClientPicker) {
+        var query by remember { mutableStateOf("") }
+        AlertDialog(onDismissRequest = { showClientPicker = false }, title = { Text("Клиент заказа") },
+            text = {
+                Column {
+                    TextField(query, { query = it }, label = { Text("Имя или телефон") }, singleLine = true)
+                    if (clients.isEmpty()) Text("Сначала добавьте клиента во вкладке «Клиенты».")
+                    LazyColumn {
+                        items(clients.filter { it.name.contains(query.trim(), true) || it.phone.contains(query.trim()) }, key = { it.id }) { client ->
+                            TextButton(onClick = {
+                                viewModel.selectClient(client.id)
+                                showClientPicker = false
+                            }, modifier = Modifier.fillMaxWidth()) { Text("${client.name} · ${client.phone}") }
+                        }
+                    }
+                }
+            }, confirmButton = { Button(onClick = { showClientPicker = false }) { Text("Закрыть") } })
     }
 
     if (showProductPicker) {
@@ -208,16 +233,23 @@ private fun CartContent(
     innerPadding: PaddingValues,
     onQuantityChange: (productId: Long, quantity: Int) -> Unit,
     onRemove: (productId: Long) -> Unit,
-    onCreateOrder: () -> Unit
+    onCreateOrder: () -> Unit,
+    clientName: String?,
+    onSelectClient: () -> Unit
 ) {
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .padding(innerPadding)
             .padding(16.dp),
-        contentPadding = PaddingValues(0.dp),
+        contentPadding = PaddingValues(bottom = 88.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
+        item {
+            Button(onClick = onSelectClient, enabled = !isLoading, modifier = Modifier.fillMaxWidth()) {
+                Text(clientName?.let { "Клиент: $it" } ?: "Выбрать клиента")
+            }
+        }
         items(cartItems, key = { it.productId }) { item ->
             OrderCartItemCard(
                 item = item,
@@ -233,7 +265,7 @@ private fun CartContent(
         item {
             CreateOrderButton(
                 isLoading = isLoading,
-                enabled = !isLoading && cartItems.isNotEmpty(),
+                enabled = !isLoading && cartItems.isNotEmpty() && clientName != null,
                 onClick = onCreateOrder
             )
         }
@@ -339,10 +371,9 @@ private fun OrderCartItemCard(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            Row(
+            Column(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Text(
                     text = "${formatPrice(item.price)} × ${item.quantity} = ${formatPrice(item.price * item.quantity)}",

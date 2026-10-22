@@ -1,6 +1,9 @@
 package com.nursetmobile.ui.home
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.filled.People
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -52,7 +55,7 @@ fun HomeScreen(
     val lowStockCount by viewModel.lowStockCount.collectAsStateWithLifecycle()
 
     Column(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -100,6 +103,7 @@ fun HomeScreen(
             QuickNavButton(stringResource(R.string.go_to_products), Icons.Default.Inventory2) { onTabClick(1) }
             QuickNavButton(stringResource(R.string.go_to_categories), Icons.Default.Category) { onTabClick(2) }
             QuickNavButton(stringResource(R.string.go_to_orders), Icons.Default.ReceiptLong) { onTabClick(3) }
+            QuickNavButton(stringResource(R.string.clients), Icons.Default.People) { onTabClick(4) }
         }
     }
 }

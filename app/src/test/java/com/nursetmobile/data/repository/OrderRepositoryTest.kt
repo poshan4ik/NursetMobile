@@ -19,6 +19,9 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.async
+import kotlinx.coroutines.Dispatchers
+import com.nursetmobile.data.entity.ClientEntity
 
 /**
  * Интеграционные тесты OrderRepository с in-memory Room (Robolectric).
@@ -56,6 +59,56 @@ class OrderRepositoryTest {
     @After
     fun teardown() {
         database.close()
+    }
+
+    @Test
+    fun `заказ связан с клиентом и хранит его имя`() = runBlocking {
+        val clientId = database.clientDao().insert(ClientEntity(name = "Анна", phone = "+79991234567"))
+        val id = repository.createOrder(listOf(OrderItemInput(product1Id, 2, 1)), clientId).getOrThrow()
+        val order = database.orderDao().getOrderById(id)!!
+        assertEquals(clientId, order.clientId)
+        assertEquals("Анна", order.clientName)
+        assertEquals(2000L, order.totalPrice)
+    }
+
+    @Test
+    fun `несуществующий клиент не списывает товары`() = runBlocking {
+        assertTrue(repository.createOrder(listOf(OrderItemInput(product1Id, 1, 1000)), -1).isFailure)
+        assertEquals(10, database.productDao().getById(product1Id)?.stock)
+        assertEquals(0, database.orderDao().countOrders())
+    }
+
+    @Test
+    fun `переполнение количества не создаёт заказ`() = runBlocking {
+        val result = repository.createOrder(listOf(
+            OrderItemInput(product1Id, Int.MAX_VALUE, 1000), OrderItemInput(product1Id, 1, 1000)))
+        assertTrue(result.isFailure)
+        assertEquals(10, database.productDao().getById(product1Id)?.stock)
+        assertEquals(0, database.orderDao().countOrders())
+    }
+
+    @Test
+    fun `переполнение суммы откатывает заказ`() = runBlocking {
+        val product = database.productDao().getById(product1Id)!!
+        database.productDao().update(product.copy(price = Long.MAX_VALUE))
+        assertTrue(repository.createOrder(listOf(OrderItemInput(product1Id, 2, 1))).isFailure)
+        assertEquals(10, database.productDao().getById(product1Id)?.stock)
+        assertEquals(0, database.orderDao().countOrders())
+    }
+
+    @Test
+    fun `одновременные завершение и отмена сохраняют правильный остаток`() = runBlocking {
+        repeat(10) {
+            val id = repository.createOrder(listOf(OrderItemInput(product1Id, 1, 1000))).getOrThrow()
+            repository.updateOrderStatus(id, OrderStatus.PROCESSING).getOrThrow()
+            val stockBefore = database.productDao().getById(product1Id)!!.stock
+            val complete = async(Dispatchers.Default) { repository.updateOrderStatus(id, OrderStatus.COMPLETED) }
+            val cancel = async(Dispatchers.Default) { repository.cancelOrder(id) }
+            val results = listOf(complete.await(), cancel.await())
+            assertEquals(1, results.count { it.isSuccess })
+            val cancelled = database.orderDao().getOrderById(id)!!.status == OrderStatus.CANCELLED.value
+            assertEquals(stockBefore + if (cancelled) 1 else 0, database.productDao().getById(product1Id)!!.stock)
+        }
     }
 
     @Test

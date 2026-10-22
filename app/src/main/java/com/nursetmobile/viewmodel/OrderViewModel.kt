@@ -14,11 +14,15 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class OrderViewModel(private val repository: OrderRepository) : ViewModel() {
+    val clients = repository.clients
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    private val _selectedClientId = MutableStateFlow<Long?>(null)
+    val selectedClientId = _selectedClientId.asStateFlow()
+    fun selectClient(id: Long) { _selectedClientId.value = id }
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
@@ -32,10 +36,6 @@ class OrderViewModel(private val repository: OrderRepository) : ViewModel() {
     val orders: StateFlow<List<OrderEntity>> = repository.allOrders
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    val ordersCount: StateFlow<Int> = repository.allOrders
-        .map { list -> list.size }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
-
     val availableProducts: StateFlow<List<ProductEntity>> = repository.availableProducts
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -46,17 +46,17 @@ class OrderViewModel(private val repository: OrderRepository) : ViewModel() {
     val cartTotal: StateFlow<Long> = _cartTotal.asStateFlow()
 
     fun addToCart(product: ProductEntity, quantity: Int = 1) {
+        if (quantity <= 0 || _isLoading.value) return
         val currentItems = _selectedItems.value.toMutableList()
         val existingIndex = currentItems.indexOfFirst { it.productId == product.id }
 
         if (existingIndex >= 0) {
             val existing = currentItems[existingIndex]
-            val newQuantity = existing.quantity + quantity
-            if (newQuantity > product.stock) {
+            if (quantity > product.stock - existing.quantity) {
                 _error.value = "Недостаточно товара на складе. Доступно: ${product.stock} шт."
                 return
             }
-            currentItems[existingIndex] = existing.copy(quantity = newQuantity)
+            currentItems[existingIndex] = existing.copy(quantity = existing.quantity + quantity)
         } else {
             if (quantity > product.stock) {
                 _error.value = "Недостаточно товара на складе. Доступно: ${product.stock} шт."
@@ -72,11 +72,11 @@ class OrderViewModel(private val repository: OrderRepository) : ViewModel() {
                 )
             )
         }
-        _selectedItems.value = currentItems
-        recalculateTotal()
+        setCartItems(currentItems)
     }
 
     fun updateCartItemQuantity(productId: Long, quantity: Int) {
+        if (_isLoading.value) return
         val currentItems = _selectedItems.value.toMutableList()
         val index = currentItems.indexOfFirst { it.productId == productId }
         if (index >= 0) {
@@ -90,27 +90,38 @@ class OrderViewModel(private val repository: OrderRepository) : ViewModel() {
                 }
                 currentItems[index] = item.copy(quantity = quantity)
             }
-            _selectedItems.value = currentItems
-            recalculateTotal()
+            setCartItems(currentItems)
         }
     }
 
     fun removeFromCart(productId: Long) {
+        if (_isLoading.value) return
         val currentItems = _selectedItems.value.filterNot { it.productId == productId }
-        _selectedItems.value = currentItems
-        recalculateTotal()
+        setCartItems(currentItems)
     }
 
     fun clearCart() {
-        _selectedItems.value = emptyList()
-        recalculateTotal()
+        setCartItems(emptyList())
     }
 
-    private fun recalculateTotal() {
-        _cartTotal.value = _selectedItems.value.sumOf { it.price * it.quantity }
+    private fun setCartItems(items: List<CartItem>) {
+        val total = try {
+            items.fold(0L) { sum, item -> Math.addExact(sum, Math.multiplyExact(item.price, item.quantity.toLong())) }
+        } catch (_: ArithmeticException) {
+            _error.value = "Слишком большая сумма заказа. Уменьшите количество или проверьте цену."
+            return
+        }
+        _selectedItems.value = items
+        _cartTotal.value = total
     }
 
     fun createOrder() {
+        if (_isLoading.value || _success.value != null) return
+        val clientId = _selectedClientId.value
+        if (clientId == null) {
+            _error.value = "Выберите клиента. Если его нет в списке, добавьте во вкладке «Клиенты»."
+            return
+        }
         val items = _selectedItems.value
         if (items.isEmpty()) {
             _error.value = "Корзина пуста. Добавьте товары."
@@ -123,9 +134,12 @@ class OrderViewModel(private val repository: OrderRepository) : ViewModel() {
             _success.value = null
 
             val orderItems = items.map { OrderItemInput(it.productId, it.quantity, it.price) }
-            val result = repository.createOrder(orderItems)
+            val result = try {
+                repository.createOrder(orderItems, clientId)
+            } finally {
+                _isLoading.value = false
+            }
 
-            _isLoading.value = false
             result.onSuccess { orderId ->
                 _success.value = "Заказ #%03d создан успешно.".format(orderId)
                 clearCart()
@@ -134,30 +148,29 @@ class OrderViewModel(private val repository: OrderRepository) : ViewModel() {
     }
 
     fun updateOrderStatus(orderId: Long, newStatus: OrderStatus) {
-        viewModelScope.launch {
-            _isLoading.value = true
-            _error.value = null
-            _success.value = null
-
-            val result = repository.updateOrderStatus(orderId, newStatus)
-
-            _isLoading.value = false
-            result.onSuccess { _success.value = "Статус заказа изменён на ${newStatus.displayName}." }
-                .onFailure { _error.value = it.message }
+        runOrderAction("Статус заказа изменён на ${newStatus.displayName}.") {
+            repository.updateOrderStatus(orderId, newStatus)
         }
     }
 
     fun cancelOrder(orderId: Long) {
+        runOrderAction("Заказ отменён, товары возвращены на склад.") {
+            repository.cancelOrder(orderId)
+        }
+    }
+
+    private fun runOrderAction(message: String, action: suspend () -> Result<Unit>) {
+        if (_isLoading.value) return
+        _isLoading.value = true
+        _error.value = null
+        _success.value = null
         viewModelScope.launch {
-            _isLoading.value = true
-            _error.value = null
-            _success.value = null
-
-            val result = repository.cancelOrder(orderId)
-
-            _isLoading.value = false
-            result.onSuccess { _success.value = "Заказ отменён, товары возвращены на склад." }
-                .onFailure { _error.value = it.message }
+            try {
+                action().onSuccess { _success.value = message }
+                    .onFailure { _error.value = it.message ?: "Не удалось изменить заказ." }
+            } finally {
+                _isLoading.value = false
+            }
         }
     }
 

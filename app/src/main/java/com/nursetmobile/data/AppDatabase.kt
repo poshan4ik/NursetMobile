@@ -4,6 +4,11 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.withTransaction
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
+import com.nursetmobile.data.dao.ClientDao
+import com.nursetmobile.data.entity.ClientEntity
 import com.nursetmobile.data.dao.CategoryDao
 import com.nursetmobile.data.dao.OrderDao
 import com.nursetmobile.data.dao.ProductDao
@@ -16,15 +21,17 @@ import kotlinx.coroutines.flow.first
 
 @Database(
     entities = [
+        ClientEntity::class,
         CategoryEntity::class,
         ProductEntity::class,
         OrderEntity::class,
         OrderItemEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
+    abstract fun clientDao(): ClientDao
 
     abstract fun categoryDao(): CategoryDao
     abstract fun productDao(): ProductDao
@@ -35,6 +42,14 @@ abstract class AppDatabase : RoomDatabase() {
         private var INSTANCE: AppDatabase? = null
 
         private const val DATABASE_NAME = "nurset_mobile.db"
+
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS clients (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, name TEXT NOT NULL, phone TEXT NOT NULL)")
+                db.execSQL("ALTER TABLE orders ADD COLUMN clientId INTEGER")
+                db.execSQL("ALTER TABLE orders ADD COLUMN clientName TEXT NOT NULL DEFAULT ''")
+            }
+        }
 
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
@@ -47,7 +62,7 @@ abstract class AppDatabase : RoomDatabase() {
                         AppDatabase::class.java,
                         DATABASE_NAME
                     )
-                        .fallbackToDestructiveMigration(dropAllTables = true)
+                        .addMigrations(MIGRATION_1_2)
                         .build()
                     INSTANCE = newInstance
                     newInstance
@@ -56,9 +71,9 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         // Заполняет базу демоданными при первом запуске (категории, товары, заказы)
-        suspend fun populateDemoDataIfEmpty(db: AppDatabase) {
+        suspend fun populateDemoDataIfEmpty(db: AppDatabase) = db.withTransaction {
             val hasData = db.categoryDao().getAll().first().isNotEmpty() || db.orderDao().countOrders() > 0
-            if (hasData) return
+            if (hasData) return@withTransaction
 
             val catPhonesId = db.categoryDao().insert(CategoryEntity("Смартфоны"))
             val catLaptopsId = db.categoryDao().insert(CategoryEntity("Ноутбуки"))
@@ -106,6 +121,12 @@ abstract class AppDatabase : RoomDatabase() {
                     ),
                     positions
                 )
+                if (status != OrderStatus.CANCELLED) {
+                    positions.forEach { item ->
+                        val product = requireNotNull(db.productDao().getById(item.productId))
+                        db.productDao().update(product.copy(stock = product.stock - item.quantity))
+                    }
+                }
             }
         }
     }

@@ -1,4 +1,5 @@
 <resources>
+    <string name="clients">Клиенты</string>
     <string name="app_name">NursetMobile</string>
     <string name="home">Главная</string>
     <string name="products">Товары</string>

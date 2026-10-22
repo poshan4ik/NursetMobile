@@ -249,6 +249,7 @@ private fun OrderInfoCard(order: OrderEntity, status: OrderStatus) {
                 StatusChip(status = status)
             }
             Spacer(modifier = Modifier.height(8.dp))
+            if (order.clientName.isNotBlank()) Text("Клиент: ${order.clientName}")
             Text(
                 text = stringResource(R.string.date_with_value, dateText),
                 fontSize = 14.sp,

@@ -12,6 +12,7 @@ import com.nursetmobile.domain.canTransitionTo
 import com.nursetmobile.domain.isActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.CancellationException
 
 class OrderRepository(private val database: AppDatabase) {
 
@@ -19,13 +20,14 @@ class OrderRepository(private val database: AppDatabase) {
     private val productDao: ProductDao = database.productDao()
 
     val allOrders: Flow<List<OrderEntity>> = orderDao.getAllOrders()
+    val clients = database.clientDao().getAll()
 
     val availableProducts: Flow<List<ProductEntity>> = productDao.getAll()
         .map { list -> list.filter { it.stock > 0 } }
 
     suspend fun getOrderWithItems(orderId: Long) = orderDao.getOrderWithItems(orderId)
 
-    suspend fun createOrder(items: List<OrderItemInput>): Result<Long> {
+    suspend fun createOrder(items: List<OrderItemInput>, clientId: Long? = null): Result<Long> {
         if (items.isEmpty()) {
             return Result.failure(IllegalArgumentException("Корзина пуста. Добавьте товары."))
         }
@@ -33,8 +35,10 @@ class OrderRepository(private val database: AppDatabase) {
             return Result.failure(IllegalArgumentException("Количество должно быть больше нуля."))
         }
         return try {
-            val orderId = database.withTransaction { createOrderInTransaction(items) }
+            val orderId = database.withTransaction { createOrderInTransaction(items, clientId) }
             Result.success(orderId)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -45,37 +49,32 @@ class OrderRepository(private val database: AppDatabase) {
         if (newStatus == OrderStatus.CANCELLED) {
             return cancelOrder(orderId)
         }
-        val order = orderDao.getOrderById(orderId)
-            ?: return Result.failure(IllegalArgumentException("Заказ не найден."))
-        val currentStatus = OrderStatus.fromValue(order.status)
-        if (!canTransitionTo(currentStatus, newStatus)) {
-            return Result.failure(
-                IllegalArgumentException(
+        return try {
+            database.withTransaction {
+                val order = orderDao.getOrderById(orderId)
+                    ?: throw IllegalArgumentException("Заказ не найден.")
+                val currentStatus = OrderStatus.fromValue(order.status)
+                require(canTransitionTo(currentStatus, newStatus)) {
                     "Недопустимый переход статуса: ${currentStatus.displayName} → ${newStatus.displayName}"
-                )
-            )
+                }
+                orderDao.updateOrder(order.copy(status = newStatus.value))
+            }
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Result.failure(e)
         }
-        orderDao.updateOrder(order.copy(status = newStatus.value))
-        return Result.success(Unit)
     }
 
     suspend fun cancelOrder(orderId: Long): Result<Unit> {
-        val order = orderDao.getOrderById(orderId)
-            ?: return Result.failure(IllegalArgumentException("Заказ не найден."))
-        val currentStatus = OrderStatus.fromValue(order.status)
-        if (currentStatus == OrderStatus.CANCELLED) {
-            return Result.failure(IllegalArgumentException("Заказ уже отменён."))
-        }
-        if (!isActive(currentStatus)) {
-            return Result.failure(
-                IllegalArgumentException("Можно отменить только активные заказы (Новый или В обработке).")
-            )
-        }
         return try {
             database.withTransaction {
                 cancelOrderInTransaction(orderId)
             }
             Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -88,22 +87,28 @@ class OrderRepository(private val database: AppDatabase) {
         if (OrderStatus.fromValue(order.status) == OrderStatus.CANCELLED) {
             throw IllegalArgumentException("Заказ уже отменён.")
         }
+        require(isActive(OrderStatus.fromValue(order.status))) {
+            "Можно отменить только активные заказы (Новый или В обработке)."
+        }
         val items = orderDao.getItemsByOrderId(orderId)
         for (item in items) {
             val product = productDao.getById(item.productId)
             if (product != null) {
-                productDao.update(product.copy(stock = product.stock + item.quantity))
+                productDao.update(product.copy(stock = Math.addExact(product.stock, item.quantity)))
             }
         }
         orderDao.updateOrder(order.copy(status = OrderStatus.CANCELLED.value))
     }
 
     // Создание заказа и списание остатков — все изменения в одной транзакции
-    private suspend fun createOrderInTransaction(items: List<OrderItemInput>): Long {
+    private suspend fun createOrderInTransaction(items: List<OrderItemInput>, clientId: Long?): Long {
+        val client = clientId?.let {
+            database.clientDao().getById(it) ?: throw IllegalArgumentException("Клиент не найден.")
+        }
         // Повторяющиеся товары объединяем: суммарное количество по каждому товару
         val totalQuantityByProductId = items
             .groupBy { it.productId }
-            .mapValues { (_, productItems) -> productItems.sumOf { item -> item.quantity } }
+            .mapValues { (_, productItems) -> productItems.fold(0) { total, item -> Math.addExact(total, item.quantity) } }
 
         // Проверяем остатки по объединённому количеству и берём цены из базы
         val products = totalQuantityByProductId.mapValues { (productId, totalQuantity) ->
@@ -115,14 +120,16 @@ class OrderRepository(private val database: AppDatabase) {
             product
         }
 
-        val totalPrice = products.values.sumOf { product ->
-            product.price * totalQuantityByProductId.getValue(product.id)
+        val totalPrice = products.values.fold(0L) { total, product ->
+            Math.addExact(total, Math.multiplyExact(product.price, totalQuantityByProductId.getValue(product.id).toLong()))
         }
 
         val order = OrderEntity(
             createdAt = System.currentTimeMillis(),
             totalPrice = totalPrice,
-            status = OrderStatus.NEW.value
+            status = OrderStatus.NEW.value,
+            clientId = client?.id,
+            clientName = client?.name.orEmpty()
         )
         val orderItems = products.values.map { product ->
             OrderItemEntity(

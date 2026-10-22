@@ -165,6 +165,14 @@ class ProductRepositoryTest {
     }
 
     @Test
+    fun `поиск кириллицы без учёта регистра и пробелов`() = runBlocking {
+        repository.addProduct("Смартфон", categoryId, 1000, 5).getOrThrow()
+        assertEquals(1, repository.searchAndFilter("  СМАРТ  ", null).first().size)
+        assertEquals(1, repository.searchAndFilter("смарт", categoryId).first().size)
+        assertTrue(repository.searchAndFilter("%", null).first().isEmpty())
+    }
+
+    @Test
     fun `фильтр по категории без поиска`() = runBlocking {
         val otherCategory = database.categoryDao().insert(CategoryEntity("Другая категория"))
         repository.addProduct("Товар A", categoryId, 1000, 5)
