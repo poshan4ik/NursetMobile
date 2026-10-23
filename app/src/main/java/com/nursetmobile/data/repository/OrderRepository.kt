@@ -27,7 +27,7 @@ class OrderRepository(private val database: AppDatabase) {
 
     suspend fun getOrderWithItems(orderId: Long) = orderDao.getOrderWithItems(orderId)
 
-    suspend fun createOrder(items: List<OrderItemInput>, clientId: Long? = null): Result<Long> {
+    suspend fun createOrder(items: List<OrderItemInput>, clientId: Long? = null, expectedTotal: Long? = null): Result<Long> {
         if (items.isEmpty()) {
             return Result.failure(IllegalArgumentException("Корзина пуста. Добавьте товары."))
         }
@@ -35,7 +35,7 @@ class OrderRepository(private val database: AppDatabase) {
             return Result.failure(IllegalArgumentException("Количество должно быть больше нуля."))
         }
         return try {
-            val orderId = database.withTransaction { createOrderInTransaction(items, clientId) }
+            val orderId = database.withTransaction { createOrderInTransaction(items, clientId, expectedTotal) }
             Result.success(orderId)
         } catch (e: CancellationException) {
             throw e
@@ -101,7 +101,7 @@ class OrderRepository(private val database: AppDatabase) {
     }
 
     // Создание заказа и списание остатков — все изменения в одной транзакции
-    private suspend fun createOrderInTransaction(items: List<OrderItemInput>, clientId: Long?): Long {
+    private suspend fun createOrderInTransaction(items: List<OrderItemInput>, clientId: Long?, expectedTotal: Long?): Long {
         val client = clientId?.let {
             database.clientDao().getById(it) ?: throw IllegalArgumentException("Клиент не найден.")
         }
@@ -122,6 +122,9 @@ class OrderRepository(private val database: AppDatabase) {
 
         val totalPrice = products.values.fold(0L) { total, product ->
             Math.addExact(total, Math.multiplyExact(product.price, totalQuantityByProductId.getValue(product.id).toLong()))
+        }
+        if (expectedTotal != null && (totalPrice != expectedTotal || items.any { it.price != products.getValue(it.productId).price })) {
+            throw IllegalArgumentException("Цены товаров изменились. Корзина обновлена — проверьте сумму и подтвердите заказ ещё раз.")
         }
 
         val order = OrderEntity(

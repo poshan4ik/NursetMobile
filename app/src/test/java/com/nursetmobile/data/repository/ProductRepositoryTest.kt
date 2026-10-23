@@ -64,6 +64,16 @@ class ProductRepositoryTest {
     }
 
     @Test
+    fun `устаревшая карточка не перезаписывает остаток после заказа`() = runBlocking {
+        val id = repository.addProduct("Товар", categoryId, 1000, 5).getOrThrow()
+        OrderRepository.create(database).createOrder(listOf(OrderItemInput(id, 2, 1000))).getOrThrow()
+        val result = repository.updateProduct(id, "Новое имя", categoryId, 1000, 5, expectedStock = 5)
+        assertTrue(result.isFailure)
+        assertEquals(3, database.productDao().getById(id)?.stock)
+        assertEquals("Товар", database.productDao().getById(id)?.name)
+    }
+
+    @Test
     fun `добавление товара с пустым именем — ошибка`() = runBlocking {
         val result = repository.addProduct("   ", categoryId, 1000, 5)
         assertFalse(result.isSuccess)

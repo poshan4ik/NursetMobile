@@ -18,12 +18,13 @@ class ClientViewModel(database: AppDatabase) : ViewModel() {
     private val _saving = MutableStateFlow(false)
     val saving = _saving.asStateFlow()
 
-    fun register(name: String, phone: String, onSaved: () -> Unit) {
+    fun save(id: Long?, name: String, phone: String, onSaved: (Long) -> Unit) {
         if (_saving.value) return
         _saving.value = true
         viewModelScope.launch {
             try {
-                repository.register(name, phone).onSuccess { onSaved() }
+                val result = if (id == null) repository.register(name, phone) else repository.update(id, name, phone)
+                result.onSuccess { onSaved(it) }
                     .onFailure { _error.value = it.message ?: "Не удалось сохранить клиента." }
             } finally {
                 _saving.value = false

@@ -53,20 +53,22 @@ fun NursetNavHost(
     val selectedTab = when {
         currentRoute == null -> 0
         currentRoute.startsWith("order_details") -> 3
-        currentRoute == "create_order" -> 3
+        currentRoute.startsWith("create_order") -> 3
         else -> tabs.indexOfFirst { it.route == currentRoute }.coerceAtLeast(0)
     }
 
     fun navigateToTab(index: Int) {
         val tab = tabs.getOrNull(index) ?: return
         navController.navigate(tab.route) {
-            popUpTo("home") { inclusive = false }
+            popUpTo("home") { inclusive = false; saveState = true }
             launchSingleTop = true
+            restoreState = true
         }
     }
 
     Scaffold(
         bottomBar = {
+            if (currentRoute?.startsWith("create_order") != true) {
             NavigationBar {
                 tabs.forEach { tab ->
                     val isSelected = tabs.indexOf(tab) == selectedTab
@@ -90,6 +92,7 @@ fun NursetNavHost(
                     )
                 }
             }
+            }
         }
     ) { innerPadding ->
         NavHost(
@@ -107,7 +110,8 @@ fun NursetNavHost(
                 CategoriesScreen()
             }
             composable("clients") {
-                ClientsScreen(onOrderClick = { navController.navigate("order_details/$it") })
+                ClientsScreen(onOrderClick = { navController.navigate("order_details/$it") },
+                    onCreateOrder = { navController.navigate("create_order?clientId=$it") })
             }
             composable("orders") {
                 OrdersScreen(
@@ -115,8 +119,12 @@ fun NursetNavHost(
                     onOrderClick = { orderId -> navController.navigate("order_details/$orderId") }
                 )
             }
-            composable("create_order") {
-                CreateOrderScreen(onBack = { navController.popBackStack() })
+            composable("create_order?clientId={clientId}", arguments = listOf(navArgument("clientId") {
+                type = NavType.LongType
+                defaultValue = 0L
+            })) { entry ->
+                CreateOrderScreen(onBack = { navController.popBackStack() },
+                    initialClientId = entry.arguments?.getLong("clientId") ?: 0L)
             }
             composable(
                 route = "order_details/{orderId}",

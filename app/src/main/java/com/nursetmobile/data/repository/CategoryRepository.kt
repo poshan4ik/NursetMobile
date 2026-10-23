@@ -1,16 +1,20 @@
 package com.nursetmobile.data.repository
 
 import com.nursetmobile.data.AppDatabase
-import com.nursetmobile.data.dao.CategoryDao
 import com.nursetmobile.data.entity.CategoryEntity
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 
-class CategoryRepository(private val dao: CategoryDao) {
+class CategoryRepository(private val database: AppDatabase) {
+    private val dao = database.categoryDao()
+
+    suspend fun addCategory(name: String): Result<Long> = database.mutate { addCategoryValidated(name) }
+    suspend fun updateCategory(id: Long, name: String): Result<Unit> = database.mutate { updateCategoryValidated(id, name) }
+    suspend fun deleteCategory(id: Long): Result<Unit> = database.mutate { deleteCategoryValidated(id) }
 
     val allCategories: Flow<List<CategoryEntity>> = dao.getAll()
 
-    suspend fun addCategory(name: String): Result<Long> {
+    private suspend fun addCategoryValidated(name: String): Result<Long> {
         val trimmedName = name.trim()
         if (trimmedName.isEmpty()) {
             return Result.failure(IllegalArgumentException("Название не может быть пустым."))
@@ -24,7 +28,7 @@ class CategoryRepository(private val dao: CategoryDao) {
         return Result.success(id)
     }
 
-    suspend fun updateCategory(id: Long, name: String): Result<Unit> {
+    private suspend fun updateCategoryValidated(id: Long, name: String): Result<Unit> {
         val trimmedName = name.trim()
         if (trimmedName.isEmpty()) {
             return Result.failure(IllegalArgumentException("Название не может быть пустым."))
@@ -40,7 +44,7 @@ class CategoryRepository(private val dao: CategoryDao) {
         return Result.success(Unit)
     }
 
-    suspend fun deleteCategory(id: Long): Result<Unit> {
+    private suspend fun deleteCategoryValidated(id: Long): Result<Unit> {
         val category = dao.getById(id) ?: return Result.failure(IllegalArgumentException("Категория не найдена."))
         val productsCount = dao.countProductsInCategory(id)
         if (productsCount > 0) {
@@ -51,6 +55,6 @@ class CategoryRepository(private val dao: CategoryDao) {
     }
 
     companion object {
-        fun create(database: AppDatabase): CategoryRepository = CategoryRepository(database.categoryDao())
+        fun create(database: AppDatabase): CategoryRepository = CategoryRepository(database)
     }
 }

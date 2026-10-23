@@ -79,6 +79,38 @@ class OrderRepositoryTest {
     }
 
     @Test
+    fun `изменение цены требует повторного подтверждения и не списывает товар`() = runBlocking {
+        val product = database.productDao().getById(product1Id)!!
+        database.productDao().update(product.copy(price = 1500))
+        val result = repository.createOrder(listOf(OrderItemInput(product1Id, 2, 1000)), expectedTotal = 2000)
+        assertTrue(result.isFailure)
+        assertEquals(10, database.productDao().getById(product1Id)?.stock)
+        assertEquals(0, database.orderDao().countOrders())
+        val id = repository.createOrder(listOf(OrderItemInput(product1Id, 2, 1500)), expectedTotal = 3000).getOrThrow()
+        assertEquals(3000L, database.orderDao().getOrderById(id)?.totalPrice)
+        assertEquals(8, database.productDao().getById(product1Id)?.stock)
+    }
+
+    @Test
+    fun `изменение цен позиций проверяется даже при прежней итоговой сумме`() = runBlocking {
+        database.productDao().update(database.productDao().getById(product1Id)!!.copy(price = 900))
+        database.productDao().update(database.productDao().getById(product2Id)!!.copy(price = 600))
+        assertTrue(repository.createOrder(listOf(OrderItemInput(product1Id, 1, 1000), OrderItemInput(product2Id, 1, 500)), expectedTotal = 1500).isFailure)
+        assertEquals(0, database.orderDao().countOrders())
+    }
+
+    @Test
+    fun `редактирование клиента сохраняет историю и снимок имени в заказе`() = runBlocking {
+        val clients = ClientRepository(database.clientDao())
+        val clientId = clients.register("Анна", "79991234567").getOrThrow()
+        val orderId = repository.createOrder(listOf(OrderItemInput(product1Id, 1, 1000)), clientId).getOrThrow()
+        clients.update(clientId, "Анна Иванова", "79991234567").getOrThrow()
+        val order = database.orderDao().getOrderById(orderId)!!
+        assertEquals(clientId, order.clientId)
+        assertEquals("Анна", order.clientName)
+    }
+
+    @Test
     fun `переполнение количества не создаёт заказ`() = runBlocking {
         val result = repository.createOrder(listOf(
             OrderItemInput(product1Id, Int.MAX_VALUE, 1000), OrderItemInput(product1Id, 1, 1000)))

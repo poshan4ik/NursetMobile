@@ -64,19 +64,21 @@ fun CategoriesScreen(
 ) {
     val categories by viewModel.categories.collectAsStateWithLifecycle()
     val error by viewModel.error.collectAsStateWithLifecycle()
+    val isSaving by viewModel.isLoading.collectAsStateWithLifecycle()
+    var showAddDialog by remember { mutableStateOf(false) }
+    var editingCategory by remember { mutableStateOf<CategoryEntity?>(null) }
+    var deletingCategory by remember { mutableStateOf<CategoryEntity?>(null) }
 
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(error) {
-        error?.let { message ->
+        error?.takeIf { !showAddDialog && editingCategory == null }?.let { message ->
             snackbarHostState.showSnackbar(message)
             viewModel.clearError()
         }
     }
 
-    var showAddDialog by remember { mutableStateOf(false) }
-    var editingCategory by remember { mutableStateOf<CategoryEntity?>(null) }
-    var deletingCategory by remember { mutableStateOf<CategoryEntity?>(null) }
+    LaunchedEffect(showAddDialog, editingCategory?.id) { viewModel.clearError() }
 
     Scaffold(
         topBar = {
@@ -128,7 +130,7 @@ fun CategoriesScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding),
-                contentPadding = PaddingValues(16.dp),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 88.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(categories, key = { it.id }) { category ->
@@ -146,11 +148,12 @@ fun CategoriesScreen(
         CategoryDialog(
             title = stringResource(R.string.add),
             initialText = "",
+            isSaving = isSaving,
+            error = error,
             onConfirm = { text ->
-                viewModel.addCategory(text)
-                showAddDialog = false
+                viewModel.addCategory(text) { showAddDialog = false }
             },
-            onDismiss = { showAddDialog = false }
+            onDismiss = { if (!isSaving) showAddDialog = false }
         )
     }
 
@@ -158,11 +161,12 @@ fun CategoriesScreen(
         CategoryDialog(
             title = stringResource(R.string.edit),
             initialText = category.name,
+            isSaving = isSaving,
+            error = error,
             onConfirm = { text ->
-                viewModel.updateCategory(category.id, text)
-                editingCategory = null
+                viewModel.updateCategory(category.id, text) { editingCategory = null }
             },
-            onDismiss = { editingCategory = null }
+            onDismiss = { if (!isSaving) editingCategory = null }
         )
     }
 
@@ -242,6 +246,8 @@ private fun CategoryItemCard(
 private fun CategoryDialog(
     title: String,
     initialText: String,
+    isSaving: Boolean,
+    error: String?,
     onConfirm: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -251,24 +257,28 @@ private fun CategoryDialog(
         onDismissRequest = onDismiss,
         title = { Text(text = title) },
         text = {
+            Column {
             TextField(
                 value = text,
+                enabled = !isSaving,
                 onValueChange = { text = it },
                 label = { Text(stringResource(R.string.category_name_label)) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
             )
+            error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            }
         },
         confirmButton = {
             Button(
                 onClick = { onConfirm(text) },
-                enabled = text.trim().isNotEmpty()
+                enabled = !isSaving && text.trim().isNotEmpty()
             ) {
                 Text(stringResource(R.string.save))
             }
         },
         dismissButton = {
-            Button(onClick = onDismiss) {
+            Button(onClick = onDismiss, enabled = !isSaving) {
                 Text(stringResource(R.string.cancel))
             }
         }

@@ -15,6 +15,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.TextButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ReceiptLong
@@ -36,6 +40,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import com.nursetmobile.domain.OrderFilter
+import com.nursetmobile.domain.filterOrders
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -69,6 +78,9 @@ fun OrdersScreen(
 ) {
     val orders by viewModel.orders.collectAsStateWithLifecycle()
     val ordersCount = orders.size
+    var query by rememberSaveable { mutableStateOf("") }
+    var selectedFilter by rememberSaveable { mutableStateOf(OrderFilter.ALL) }
+    val visibleOrders = remember(orders, query, selectedFilter) { filterOrders(orders, query, selectedFilter) }
     val error by viewModel.error.collectAsStateWithLifecycle()
     val success by viewModel.success.collectAsStateWithLifecycle()
 
@@ -118,53 +130,69 @@ fun OrdersScreen(
             }
         }
     ) { innerPadding ->
-        if (orders.isEmpty()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.ReceiptLong,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f),
-                        modifier = Modifier.size(64.dp)
-                    )
-                    Text(
-                        text = stringResource(R.string.empty_orders),
-                        fontSize = 18.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Button(
-                        onClick = onCreateOrder,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary
-                        )
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(stringResource(R.string.create_order))
-                    }
+        Column(Modifier.fillMaxSize().padding(innerPadding)) {
+            OutlinedTextField(query, { query = it }, singleLine = true,
+                label = { Text("Номер заказа или имя клиента") },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                trailingIcon = { if (query.isNotEmpty()) TextButton(onClick = { query = "" }) { Text("Сбросить") } })
+            LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(OrderFilter.entries) { filter ->
+                    FilterChip(selected = selectedFilter == filter, onClick = { selectedFilter = filter }, label = { Text(filter.label) })
                 }
             }
-        } else {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 88.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                items(orders, key = { it.id }) { order ->
-                    OrderListItem(
-                        order = order,
-                        onClick = { onOrderClick(order.id) }
-                    )
+            if (orders.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .weight(1f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ReceiptLong,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f),
+                            modifier = Modifier.size(64.dp)
+                        )
+                        Text(
+                            text = stringResource(R.string.empty_orders),
+                            fontSize = 18.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Button(
+                            onClick = onCreateOrder,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary
+                            )
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = null)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(stringResource(R.string.create_order))
+                        }
+                    }
+                }
+            } else if (visibleOrders.isEmpty()) {
+                Column(Modifier.fillMaxWidth().padding(24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Заказы не найдены. Измените поиск или статус.")
+                    TextButton(onClick = { query = ""; selectedFilter = OrderFilter.ALL }) { Text("Сбросить фильтры") }
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .weight(1f),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 88.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(visibleOrders, key = { it.id }) { order ->
+                        OrderListItem(
+                            order = order,
+                            onClick = { onOrderClick(order.id) }
+                        )
+                    }
                 }
             }
         }

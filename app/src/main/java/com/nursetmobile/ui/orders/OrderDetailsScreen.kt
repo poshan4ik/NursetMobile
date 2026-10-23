@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -70,6 +71,7 @@ fun OrderDetailsScreen(
 ) {
     val error by viewModel.error.collectAsStateWithLifecycle()
     val success by viewModel.success.collectAsStateWithLifecycle()
+    val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -150,6 +152,7 @@ fun OrderDetailsScreen(
                     order = order,
                     orderItems = orderItems,
                     innerPadding = innerPadding,
+                    isLoading = isLoading,
                     onStatusChange = { newStatus ->
                         viewModel.updateOrderStatus(orderId, newStatus)
                     },
@@ -170,6 +173,7 @@ fun OrderDetailsScreen(
             text = { Text(text = stringResource(R.string.cancel_order_warning)) },
             confirmButton = {
                 Button(
+                    enabled = !isLoading,
                     onClick = {
                         viewModel.cancelOrder(orderId)
                         showCancelDialog = false
@@ -198,29 +202,29 @@ private fun OrderDetailsContent(
     order: OrderEntity,
     orderItems: List<OrderItemEntity>,
     innerPadding: PaddingValues,
+    isLoading: Boolean,
     onStatusChange: (OrderStatus) -> Unit,
     onCancelRequest: () -> Unit
 ) {
     val status = OrderStatus.fromValue(order.status)
 
-    Column(
+    LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .padding(innerPadding)
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        OrderInfoCard(order = order, status = status)
-
-        OrderItemsList(orderItems = orderItems, modifier = Modifier.weight(1f))
-
-        OrderTotalCard(totalPrice = order.totalPrice)
-
-        StatusActionButtons(
+        item { OrderInfoCard(order = order, status = status) }
+        item { Text(stringResource(R.string.order_items), style = MaterialTheme.typography.titleMedium) }
+        items(orderItems, key = { it.id }) { OrderDetailItemCard(it) }
+        item { OrderTotalCard(totalPrice = order.totalPrice) }
+        item { StatusActionButtons(
             status = status,
+            enabled = !isLoading,
             onStatusChange = onStatusChange,
             onCancelRequest = onCancelRequest
-        )
+        ) }
     }
 }
 
@@ -260,29 +264,6 @@ private fun OrderInfoCard(order: OrderEntity, status: OrderStatus) {
 }
 
 @Composable
-private fun OrderItemsList(orderItems: List<OrderItemEntity>, modifier: Modifier) {
-    if (orderItems.isEmpty()) {
-        Spacer(modifier = modifier)
-        return
-    }
-
-    Text(
-        text = stringResource(R.string.order_items),
-        fontSize = 18.sp,
-        fontWeight = FontWeight.Medium
-    )
-    LazyColumn(
-        modifier = modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(vertical = 4.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        items(orderItems, key = { it.id }) { item ->
-            OrderDetailItemCard(item = item)
-        }
-    }
-}
-
-@Composable
 private fun OrderTotalCard(totalPrice: Long) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -316,6 +297,7 @@ private fun OrderTotalCard(totalPrice: Long) {
 @Composable
 private fun StatusActionButtons(
     status: OrderStatus,
+    enabled: Boolean,
     onStatusChange: (OrderStatus) -> Unit,
     onCancelRequest: () -> Unit
 ) {
@@ -326,10 +308,11 @@ private fun StatusActionButtons(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Button(
+                    enabled = enabled,
                     onClick = { onStatusChange(OrderStatus.PROCESSING) },
                     modifier = Modifier
                         .weight(1f)
-                        .height(48.dp),
+                        .heightIn(min = 48.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.primary
                     )
@@ -340,6 +323,7 @@ private fun StatusActionButtons(
                     )
                 }
                 CancelButton(
+                    enabled = enabled,
                     onClick = onCancelRequest,
                     modifier = Modifier.weight(1f)
                 )
@@ -352,10 +336,11 @@ private fun StatusActionButtons(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Button(
+                    enabled = enabled,
                     onClick = { onStatusChange(OrderStatus.COMPLETED) },
                     modifier = Modifier
                         .weight(1f)
-                        .height(48.dp),
+                        .heightIn(min = 48.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.tertiary
                     )
@@ -366,6 +351,7 @@ private fun StatusActionButtons(
                     )
                 }
                 CancelButton(
+                    enabled = enabled,
                     onClick = onCancelRequest,
                     modifier = Modifier.weight(1f)
                 )
@@ -387,10 +373,11 @@ private fun StatusActionButtons(
 }
 
 @Composable
-private fun CancelButton(onClick: () -> Unit, modifier: Modifier) {
+private fun CancelButton(onClick: () -> Unit, modifier: Modifier, enabled: Boolean) {
     Button(
         onClick = onClick,
-        modifier = modifier.height(48.dp),
+        enabled = enabled,
+        modifier = modifier.heightIn(min = 48.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = MaterialTheme.colorScheme.errorContainer
         )
@@ -412,6 +399,7 @@ private fun OrderDetailItemCard(item: OrderItemEntity) {
             ) {
                 Text(
                     text = item.productName,
+                    modifier = Modifier.weight(1f).padding(end = 8.dp),
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Medium
                 )

@@ -2,6 +2,10 @@ package com.nursetmobile.ui.products
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -79,19 +83,21 @@ fun ProductsScreen(
     val selectedCategoryId by viewModel.selectedCategoryId.collectAsStateWithLifecycle()
     val lowStockCount by viewModel.lowStockCount.collectAsStateWithLifecycle()
     val error by viewModel.error.collectAsStateWithLifecycle()
+    val isSaving by viewModel.isLoading.collectAsStateWithLifecycle()
+    var showAddDialog by remember { mutableStateOf(false) }
+    var editingProduct by remember { mutableStateOf<ProductEntity?>(null) }
+    var deletingProduct by remember { mutableStateOf<ProductEntity?>(null) }
 
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(error) {
-        error?.let { message ->
+        error?.takeIf { !showAddDialog && editingProduct == null }?.let { message ->
             snackbarHostState.showSnackbar(message)
             viewModel.clearError()
         }
     }
 
-    var showAddDialog by remember { mutableStateOf(false) }
-    var editingProduct by remember { mutableStateOf<ProductEntity?>(null) }
-    var deletingProduct by remember { mutableStateOf<ProductEntity?>(null) }
+    LaunchedEffect(showAddDialog, editingProduct?.id) { viewModel.clearError() }
 
     Scaffold(
         topBar = {
@@ -139,7 +145,7 @@ fun ProductsScreen(
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(16.dp),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 88.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(products, key = { it.id }) { product ->
@@ -159,11 +165,12 @@ fun ProductsScreen(
             title = stringResource(R.string.add),
             initial = null,
             categories = categories,
+            isSaving = isSaving,
+            error = error,
             onConfirm = { name, categoryId, price, stock ->
-                viewModel.addProduct(name, categoryId, price, stock)
-                showAddDialog = false
+                viewModel.addProduct(name, categoryId, price, stock) { showAddDialog = false }
             },
-            onDismiss = { showAddDialog = false }
+            onDismiss = { if (!isSaving) showAddDialog = false }
         )
     }
 
@@ -172,11 +179,12 @@ fun ProductsScreen(
             title = stringResource(R.string.edit),
             initial = product,
             categories = categories,
+            isSaving = isSaving,
+            error = error,
             onConfirm = { name, categoryId, price, stock ->
-                viewModel.updateProduct(product.id, name, categoryId, price, stock)
-                editingProduct = null
+                viewModel.updateProduct(product.id, name, categoryId, price, stock, expectedStock = product.stock) { editingProduct = null }
             },
-            onDismiss = { editingProduct = null }
+            onDismiss = { if (!isSaving) editingProduct = null }
         )
     }
 
@@ -446,6 +454,8 @@ private fun ProductDialog(
     title: String,
     initial: ProductEntity?,
     categories: List<CategoryEntity>,
+    isSaving: Boolean,
+    error: String?,
     onConfirm: (name: String, categoryId: Long, price: Long, stock: Int) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -463,11 +473,12 @@ private fun ProductDialog(
         title = { Text(text = title) },
         text = {
             Column(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 TextField(
                     value = name,
+                    enabled = !isSaving,
                     onValueChange = {
                         name = it
                         nameError = false
@@ -490,6 +501,7 @@ private fun ProductDialog(
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(categories) { category ->
                             FilterChip(
+                                enabled = !isSaving,
                                 selected = categoryId == category.id,
                                 onClick = { categoryId = category.id },
                                 label = { Text(category.name) }
@@ -500,6 +512,8 @@ private fun ProductDialog(
 
                 TextField(
                     value = priceText,
+                    enabled = !isSaving,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     onValueChange = {
                         priceText = it
                         priceError = false
@@ -515,6 +529,8 @@ private fun ProductDialog(
 
                 TextField(
                     value = stockText,
+                    enabled = !isSaving,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     onValueChange = {
                         stockText = it
                         stockError = false
@@ -527,10 +543,12 @@ private fun ProductDialog(
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
         },
         confirmButton = {
             Button(
+                enabled = !isSaving && categories.isNotEmpty(),
                 onClick = {
                     val price = priceText.trim().toLongOrNull()
                     val stock = stockText.trim().toIntOrNull()

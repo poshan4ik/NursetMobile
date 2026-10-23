@@ -1,18 +1,23 @@
 package com.nursetmobile.data.repository
 
 import com.nursetmobile.data.AppDatabase
-import com.nursetmobile.data.dao.CategoryDao
-import com.nursetmobile.data.dao.ProductDao
 import com.nursetmobile.data.entity.CategoryEntity
 import com.nursetmobile.data.entity.ProductEntity
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
-class ProductRepository(
-    private val productDao: ProductDao,
-    private val categoryDao: CategoryDao
-) {
+class ProductRepository(private val database: AppDatabase) {
+    private val productDao = database.productDao()
+    private val categoryDao = database.categoryDao()
+
+    suspend fun addProduct(name: String, categoryId: Long, price: Long, stock: Int): Result<Long> =
+        database.mutate { addProductValidated(name, categoryId, price, stock) }
+
+    suspend fun updateProduct(id: Long, name: String, categoryId: Long, price: Long, stock: Int, expectedStock: Int? = null): Result<Unit> =
+        database.mutate { updateProductValidated(id, name, categoryId, price, stock, expectedStock) }
+
+    suspend fun deleteProduct(id: Long): Result<Unit> = database.mutate { deleteProductValidated(id) }
 
     val allProducts: Flow<List<ProductEntity>> = productDao.getAll()
 
@@ -29,7 +34,7 @@ class ProductRepository(
         }
     }
 
-    suspend fun addProduct(
+    private suspend fun addProductValidated(
         name: String,
         categoryId: Long,
         price: Long,
@@ -59,12 +64,13 @@ class ProductRepository(
         return Result.success(id)
     }
 
-    suspend fun updateProduct(
+    private suspend fun updateProductValidated(
         id: Long,
         name: String,
         categoryId: Long,
         price: Long,
-        stock: Int
+        stock: Int,
+        expectedStock: Int?
     ): Result<Unit> {
         val trimmedName = name.trim()
         if (trimmedName.isEmpty()) {
@@ -77,6 +83,9 @@ class ProductRepository(
             return Result.failure(IllegalArgumentException("Количество не может быть отрицательным."))
         }
         val product = productDao.getById(id) ?: return Result.failure(IllegalArgumentException("Товар не найден."))
+        if (expectedStock != null && product.stock != expectedStock) {
+            return Result.failure(IllegalArgumentException("Остаток товара изменился. Откройте карточку заново и проверьте количество."))
+        }
         val category = categoryDao.getById(categoryId)
         if (category == null) {
             return Result.failure(IllegalArgumentException("Категория не найдена."))
@@ -97,7 +106,7 @@ class ProductRepository(
         return Result.success(Unit)
     }
 
-    suspend fun deleteProduct(id: Long): Result<Unit> {
+    private suspend fun deleteProductValidated(id: Long): Result<Unit> {
         val product = productDao.getById(id) ?: return Result.failure(IllegalArgumentException("Товар не найден."))
         val activeOrdersCount = productDao.countActiveOrderItems(id)
         if (activeOrdersCount > 0) {
@@ -109,6 +118,6 @@ class ProductRepository(
 
     companion object {
         fun create(database: AppDatabase): ProductRepository =
-            ProductRepository(database.productDao(), database.categoryDao())
+            ProductRepository(database)
     }
 }

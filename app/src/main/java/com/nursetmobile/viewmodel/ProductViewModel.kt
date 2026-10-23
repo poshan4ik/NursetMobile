@@ -54,33 +54,23 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
         _selectedCategoryId.value = categoryId
     }
 
-    fun addProduct(name: String, categoryId: Long, price: Long, stock: Int) {
-        viewModelScope.launch {
-            _isLoading.value = true
-            _error.value = null
-            val result = repository.addProduct(name, categoryId, price, stock)
-            _isLoading.value = false
-            result.onFailure { _error.value = it.message }
-        }
-    }
+    fun addProduct(name: String, categoryId: Long, price: Long, stock: Int, onSaved: () -> Unit = {}) =
+        runMutation(onSaved) { repository.addProduct(name, categoryId, price, stock) }
 
-    fun updateProduct(id: Long, name: String, categoryId: Long, price: Long, stock: Int) {
-        viewModelScope.launch {
-            _isLoading.value = true
-            _error.value = null
-            val result = repository.updateProduct(id, name, categoryId, price, stock)
-            _isLoading.value = false
-            result.onFailure { _error.value = it.message }
-        }
-    }
+    fun updateProduct(id: Long, name: String, categoryId: Long, price: Long, stock: Int,
+        expectedStock: Int? = null, onSaved: () -> Unit = {}) =
+        runMutation(onSaved) { repository.updateProduct(id, name, categoryId, price, stock, expectedStock) }
 
-    fun deleteProduct(id: Long) {
+    fun deleteProduct(id: Long) = runMutation({}) { repository.deleteProduct(id) }
+
+    private fun <T> runMutation(onSaved: () -> Unit, action: suspend () -> Result<T>) {
+        if (_isLoading.value) return
+        _isLoading.value = true
+        _error.value = null
         viewModelScope.launch {
-            _isLoading.value = true
-            _error.value = null
-            val result = repository.deleteProduct(id)
-            _isLoading.value = false
-            result.onFailure { _error.value = it.message }
+            try {
+                action().onSuccess { onSaved() }.onFailure { _error.value = it.message ?: "Не удалось сохранить товар." }
+            } finally { _isLoading.value = false }
         }
     }
 

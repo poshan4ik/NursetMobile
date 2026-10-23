@@ -25,33 +25,18 @@ class CategoryViewModel(private val repository: CategoryRepository) : ViewModel(
         repository.allCategories
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    fun addCategory(name: String) {
-        viewModelScope.launch {
-            _isLoading.value = true
-            _error.value = null
-            val result = repository.addCategory(name)
-            _isLoading.value = false
-            result.onFailure { _error.value = it.message }
-        }
-    }
+    fun addCategory(name: String, onSaved: () -> Unit = {}) = runMutation(onSaved) { repository.addCategory(name) }
+    fun updateCategory(id: Long, name: String, onSaved: () -> Unit = {}) = runMutation(onSaved) { repository.updateCategory(id, name) }
+    fun deleteCategory(id: Long) = runMutation({}) { repository.deleteCategory(id) }
 
-    fun updateCategory(id: Long, name: String) {
+    private fun <T> runMutation(onSaved: () -> Unit, action: suspend () -> Result<T>) {
+        if (_isLoading.value) return
+        _isLoading.value = true
+        _error.value = null
         viewModelScope.launch {
-            _isLoading.value = true
-            _error.value = null
-            val result = repository.updateCategory(id, name)
-            _isLoading.value = false
-            result.onFailure { _error.value = it.message }
-        }
-    }
-
-    fun deleteCategory(id: Long) {
-        viewModelScope.launch {
-            _isLoading.value = true
-            _error.value = null
-            val result = repository.deleteCategory(id)
-            _isLoading.value = false
-            result.onFailure { _error.value = it.message }
+            try {
+                action().onSuccess { onSaved() }.onFailure { _error.value = it.message ?: "Не удалось сохранить категорию." }
+            } finally { _isLoading.value = false }
         }
     }
 

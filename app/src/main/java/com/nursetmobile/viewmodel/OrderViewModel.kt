@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class OrderViewModel(private val repository: OrderRepository) : ViewModel() {
@@ -22,7 +23,7 @@ class OrderViewModel(private val repository: OrderRepository) : ViewModel() {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     private val _selectedClientId = MutableStateFlow<Long?>(null)
     val selectedClientId = _selectedClientId.asStateFlow()
-    fun selectClient(id: Long) { _selectedClientId.value = id }
+    fun selectClient(id: Long) { if (!_isLoading.value && id > 0) _selectedClientId.value = id }
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
@@ -84,7 +85,7 @@ class OrderViewModel(private val repository: OrderRepository) : ViewModel() {
                 currentItems.removeAt(index)
             } else {
                 val item = currentItems[index]
-                if (quantity > item.maxStock) {
+                if (quantity > item.maxStock && quantity >= item.quantity) {
                     _error.value = "Недостаточно товара на складе. Доступно: ${item.maxStock} шт."
                     return
                 }
@@ -119,7 +120,7 @@ class OrderViewModel(private val repository: OrderRepository) : ViewModel() {
         if (_isLoading.value || _success.value != null) return
         val clientId = _selectedClientId.value
         if (clientId == null) {
-            _error.value = "Выберите клиента. Если его нет в списке, добавьте во вкладке «Клиенты»."
+            _error.value = "Выберите клиента или добавьте нового прямо в заказе."
             return
         }
         val items = _selectedItems.value
@@ -128,22 +129,30 @@ class OrderViewModel(private val repository: OrderRepository) : ViewModel() {
             return
         }
 
+        val expectedTotal = _cartTotal.value
+        _isLoading.value = true
         viewModelScope.launch {
-            _isLoading.value = true
             _error.value = null
             _success.value = null
 
             val orderItems = items.map { OrderItemInput(it.productId, it.quantity, it.price) }
-            val result = try {
-                repository.createOrder(orderItems, clientId)
+            try {
+                val result = repository.createOrder(orderItems, clientId, expectedTotal)
+                result.onSuccess { orderId ->
+                _success.value = "Заказ #%03d создан успешно.".format(orderId)
+                clearCart()
+            }.onFailure { failure ->
+                val products = repository.availableProducts.first().associateBy { it.id }
+                setCartItems(items.map { item ->
+                    val product = products[item.productId]
+                    if (product == null) item.copy(maxStock = 0)
+                    else item.copy(productName = product.name, price = product.price, maxStock = product.stock)
+                })
+                _error.value = failure.message ?: "Не удалось создать заказ. Попробуйте ещё раз."
+            }
             } finally {
                 _isLoading.value = false
             }
-
-            result.onSuccess { orderId ->
-                _success.value = "Заказ #%03d создан успешно.".format(orderId)
-                clearCart()
-            }.onFailure { _error.value = it.message }
         }
     }
 
