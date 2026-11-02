@@ -4,43 +4,37 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.nursetmobile.data.AppDatabase
-import com.nursetmobile.data.repository.CategoryRepository
+import com.nursetmobile.data.entity.OrderEntity
 import com.nursetmobile.data.repository.OrderRepository
 import com.nursetmobile.data.repository.ProductRepository
+import com.nursetmobile.domain.OrderStatus
 import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 
-class HomeViewModel(
-    private val categoryRepository: CategoryRepository,
-    private val productRepository: ProductRepository,
-    private val orderRepository: OrderRepository
-) : ViewModel() {
+data class HomeSummary(
+    val productsCount: Int = 0,
+    val lowStockCount: Int = 0,
+    val outOfStockCount: Int = 0,
+    val activeOrders: List<OrderEntity> = emptyList()
+)
 
-    val productsCount: StateFlow<Int> = productRepository.allProducts
-        .map { list -> list.size }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
-
-    val categoriesCount: StateFlow<Int> = categoryRepository.allCategories
-        .map { list -> list.size }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
-
-    val ordersCount: StateFlow<Int> = orderRepository.allOrders
-        .map { list -> list.size }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
-
-    val lowStockCount: StateFlow<Int> = productRepository.lowStockCount
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+class HomeViewModel(productRepository: ProductRepository, orderRepository: OrderRepository) : ViewModel() {
+    val summary = combine(productRepository.allProducts, orderRepository.allOrders) { products, orders ->
+        HomeSummary(
+            productsCount = products.size,
+            lowStockCount = products.count { it.stock in 1..3 },
+            outOfStockCount = products.count { it.stock == 0 },
+            activeOrders = orders.filter {
+                it.status == OrderStatus.NEW.value || it.status == OrderStatus.PROCESSING.value
+            }
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HomeSummary())
 
     class Factory(private val database: AppDatabase) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
-        override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return HomeViewModel(
-                CategoryRepository.create(database),
-                ProductRepository.create(database),
-                OrderRepository.create(database)
-            ) as T
-        }
+        override fun <T : ViewModel> create(modelClass: Class<T>): T = HomeViewModel(
+            ProductRepository.create(database), OrderRepository.create(database)
+        ) as T
     }
 }

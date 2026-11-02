@@ -1,6 +1,7 @@
 package com.nursetmobile.ui.navigation
 
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Home
@@ -20,6 +21,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.nursetmobile.domain.OrderFilter
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -86,7 +91,10 @@ fun NursetNavHost(
                         label = {
                             Text(
                                 text = stringResource(tab.label),
-                                fontSize = 12.sp
+                                fontSize = 12.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.requiredWidth(64.dp)
                             )
                         }
                     )
@@ -101,10 +109,24 @@ fun NursetNavHost(
             modifier = Modifier.padding(innerPadding)
         ) {
             composable("home") {
-                HomeScreen(onTabClick = { index -> navigateToTab(index) })
+                HomeScreen(
+                    onCreateOrder = { navController.navigate("create_order") },
+                    onOpenProducts = { filter ->
+                        navigateToTab(1)
+                        navController.currentBackStackEntry?.savedStateHandle?.set("requestedStockFilter", filter.name)
+                    },
+                    onOpenActiveOrders = {
+                        navigateToTab(3)
+                        navController.currentBackStackEntry?.savedStateHandle?.set("requestedOrderFilter", OrderFilter.ACTIVE.name)
+                    },
+                    onOrderClick = { navController.navigate("order_details/$it") }
+                )
             }
-            composable("products") {
-                ProductsScreen()
+            composable("products") { entry ->
+                val requested by entry.savedStateHandle.getStateFlow<String?>("requestedStockFilter", null).collectAsStateWithLifecycle()
+                ProductsScreen(requestedStockFilter = requested,
+                    onStockFilterApplied = { entry.savedStateHandle["requestedStockFilter"] = null },
+                    onOpenCategories = { navigateToTab(2) })
             }
             composable("categories") {
                 CategoriesScreen()
@@ -113,10 +135,13 @@ fun NursetNavHost(
                 ClientsScreen(onOrderClick = { navController.navigate("order_details/$it") },
                     onCreateOrder = { navController.navigate("create_order?clientId=$it") })
             }
-            composable("orders") {
+            composable("orders") { entry ->
+                val requested by entry.savedStateHandle.getStateFlow<String?>("requestedOrderFilter", null).collectAsStateWithLifecycle()
                 OrdersScreen(
                     onCreateOrder = { navController.navigate("create_order") },
-                    onOrderClick = { orderId -> navController.navigate("order_details/$orderId") }
+                    onOrderClick = { orderId -> navController.navigate("order_details/$orderId") },
+                    requestedFilter = requested,
+                    onFilterApplied = { entry.savedStateHandle["requestedOrderFilter"] = null }
                 )
             }
             composable("create_order?clientId={clientId}", arguments = listOf(navArgument("clientId") {
@@ -124,7 +149,13 @@ fun NursetNavHost(
                 defaultValue = 0L
             })) { entry ->
                 CreateOrderScreen(onBack = { navController.popBackStack() },
-                    initialClientId = entry.arguments?.getLong("clientId") ?: 0L)
+                    initialClientId = entry.arguments?.getLong("clientId") ?: 0L,
+                    onCreated = { id ->
+                        navController.navigate("order_details/$id") {
+                            popUpTo(entry.destination.id) { inclusive = true }
+                            launchSingleTop = true
+                        }
+                    })
             }
             composable(
                 route = "order_details/{orderId}",

@@ -24,6 +24,14 @@ class OrderViewModel(private val repository: OrderRepository) : ViewModel() {
     private val _selectedClientId = MutableStateFlow<Long?>(null)
     val selectedClientId = _selectedClientId.asStateFlow()
     fun selectClient(id: Long) { if (!_isLoading.value && id > 0) _selectedClientId.value = id }
+    fun clearClient() { if (!_isLoading.value) _selectedClientId.value = null }
+
+    private val _createdOrderId = MutableStateFlow<Long?>(null)
+    val createdOrderId = _createdOrderId.asStateFlow()
+    fun consumeCreatedOrder() { _createdOrderId.value = null }
+
+    val categories = repository.categories
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
@@ -117,12 +125,8 @@ class OrderViewModel(private val repository: OrderRepository) : ViewModel() {
     }
 
     fun createOrder() {
-        if (_isLoading.value || _success.value != null) return
+        if (_isLoading.value || _createdOrderId.value != null) return
         val clientId = _selectedClientId.value
-        if (clientId == null) {
-            _error.value = "Выберите клиента или добавьте нового прямо в заказе."
-            return
-        }
         val items = _selectedItems.value
         if (items.isEmpty()) {
             _error.value = "Корзина пуста. Добавьте товары."
@@ -139,8 +143,8 @@ class OrderViewModel(private val repository: OrderRepository) : ViewModel() {
             try {
                 val result = repository.createOrder(orderItems, clientId, expectedTotal)
                 result.onSuccess { orderId ->
-                _success.value = "Заказ #%03d создан успешно.".format(orderId)
                 clearCart()
+                _createdOrderId.value = orderId
             }.onFailure { failure ->
                 val products = repository.availableProducts.first().associateBy { it.id }
                 setCartItems(items.map { item ->

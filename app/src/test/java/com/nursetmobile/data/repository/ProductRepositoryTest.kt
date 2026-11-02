@@ -64,6 +64,36 @@ class ProductRepositoryTest {
     }
 
     @Test
+    fun `пополнение использует актуальный остаток и не меняет карточку`() = runBlocking {
+        val id = repository.addProduct("Товар", categoryId, 1000, 10).getOrThrow()
+        val orders = OrderRepository.create(database)
+        val orderId = orders.createOrder(listOf(OrderItemInput(id, 2, 1000))).getOrThrow()
+        repository.restockProduct(id, 5).getOrThrow()
+        val product = database.productDao().getById(id)!!
+        assertEquals(13, product.stock)
+        assertEquals("Товар", product.name)
+        assertEquals(1000L, product.price)
+        orders.cancelOrder(orderId).getOrThrow()
+        assertEquals(15, database.productDao().getById(id)?.stock)
+    }
+
+    @Test
+    fun `пополнение отклоняет неверное количество и отсутствующий товар`() = runBlocking {
+        val id = repository.addProduct("Товар", categoryId, 1000, 5).getOrThrow()
+        assertTrue(repository.restockProduct(id, 0).isFailure)
+        assertTrue(repository.restockProduct(id, -1).isFailure)
+        assertTrue(repository.restockProduct(-1, 1).isFailure)
+        assertEquals(5, database.productDao().getById(id)?.stock)
+    }
+
+    @Test
+    fun `переполнение при пополнении не меняет остаток`() = runBlocking {
+        val id = repository.addProduct("Товар", categoryId, 1000, Int.MAX_VALUE).getOrThrow()
+        assertTrue(repository.restockProduct(id, 1).isFailure)
+        assertEquals(Int.MAX_VALUE, database.productDao().getById(id)?.stock)
+    }
+
+    @Test
     fun `устаревшая карточка не перезаписывает остаток после заказа`() = runBlocking {
         val id = repository.addProduct("Товар", categoryId, 1000, 5).getOrThrow()
         OrderRepository.create(database).createOrder(listOf(OrderItemInput(id, 2, 1000))).getOrThrow()

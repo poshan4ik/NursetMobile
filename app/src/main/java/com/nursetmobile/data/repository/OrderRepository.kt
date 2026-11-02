@@ -21,6 +21,7 @@ class OrderRepository(private val database: AppDatabase) {
 
     val allOrders: Flow<List<OrderEntity>> = orderDao.getAllOrders()
     val clients = database.clientDao().getAll()
+    val categories = database.categoryDao().getAll()
 
     val availableProducts: Flow<List<ProductEntity>> = productDao.getAll()
         .map { list -> list.filter { it.stock > 0 } }

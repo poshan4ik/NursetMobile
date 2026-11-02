@@ -7,6 +7,7 @@ import com.nursetmobile.data.AppDatabase
 import com.nursetmobile.data.entity.CategoryEntity
 import com.nursetmobile.data.entity.ProductEntity
 import com.nursetmobile.data.repository.ProductRepository
+import com.nursetmobile.domain.ProductStockFilter
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -32,11 +33,15 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
     private val _selectedCategoryId = MutableStateFlow<Long?>(null)
     val selectedCategoryId: StateFlow<Long?> = _selectedCategoryId.asStateFlow()
 
+    private val _stockFilter = MutableStateFlow(ProductStockFilter.ALL)
+    val stockFilter = _stockFilter.asStateFlow()
+
     val products: StateFlow<List<ProductEntity>> = combine(
         _searchQuery,
         _selectedCategoryId
     ) { query, categoryId -> query to categoryId }
         .flatMapLatest { (query, categoryId) -> repository.searchAndFilter(query, categoryId) }
+        .combine(_stockFilter) { products, filter -> products.filter { filter.matches(it.stock) } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val categories: StateFlow<List<CategoryEntity>> =
@@ -54,6 +59,19 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
         _selectedCategoryId.value = categoryId
     }
 
+    fun onStockFilterChange(filter: ProductStockFilter) { _stockFilter.value = filter }
+
+    fun resetFilters() {
+        _searchQuery.value = ""
+        _selectedCategoryId.value = null
+        _stockFilter.value = ProductStockFilter.ALL
+    }
+
+    fun showStockFilter(filter: ProductStockFilter) {
+        resetFilters()
+        _stockFilter.value = filter
+    }
+
     fun addProduct(name: String, categoryId: Long, price: Long, stock: Int, onSaved: () -> Unit = {}) =
         runMutation(onSaved) { repository.addProduct(name, categoryId, price, stock) }
 
@@ -62,6 +80,9 @@ class ProductViewModel(private val repository: ProductRepository) : ViewModel() 
         runMutation(onSaved) { repository.updateProduct(id, name, categoryId, price, stock, expectedStock) }
 
     fun deleteProduct(id: Long) = runMutation({}) { repository.deleteProduct(id) }
+
+    fun restockProduct(id: Long, quantity: Int, onSaved: () -> Unit) =
+        runMutation(onSaved) { repository.restockProduct(id, quantity) }
 
     private fun <T> runMutation(onSaved: () -> Unit, action: suspend () -> Result<T>) {
         if (_isLoading.value) return

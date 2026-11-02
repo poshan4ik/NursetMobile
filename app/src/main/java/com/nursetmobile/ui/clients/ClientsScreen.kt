@@ -63,7 +63,7 @@ fun ClientsScreen(
                         })
                 }
                 if (visibleClients.isEmpty()) item {
-                    Text(if (clients.isEmpty()) "Добавьте первого клиента, чтобы оформить заказ." else "Клиенты не найдены. Попробуйте другое имя или телефон.")
+                    Text(if (clients.isEmpty()) "Добавьте клиента, чтобы сохранять его историю покупок. Заказ можно оформить и без клиента." else "Клиенты не найдены. Попробуйте другое имя или телефон.")
                     TextButton(onClick = { editingId = null; showForm = true }) { Text("Добавить клиента") }
                 }
                 items(visibleClients, key = { it.id }) { client ->

@@ -1,6 +1,7 @@
 package com.nursetmobile.ui.products
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -42,6 +43,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -67,6 +69,7 @@ import com.nursetmobile.data.entity.CategoryEntity
 import com.nursetmobile.data.entity.ProductEntity
 import com.nursetmobile.ui.formatPrice
 import com.nursetmobile.viewmodel.ProductViewModel
+import com.nursetmobile.domain.ProductStockFilter
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -75,29 +78,41 @@ fun ProductsScreen(
         factory = ProductViewModel.Factory(
             (LocalContext.current.applicationContext as NursetApplication).database
         )
-    )
+    ),
+    requestedStockFilter: String? = null,
+    onStockFilterApplied: () -> Unit = {},
+    onOpenCategories: () -> Unit = {}
 ) {
     val products by viewModel.products.collectAsStateWithLifecycle()
     val categories by viewModel.categories.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     val selectedCategoryId by viewModel.selectedCategoryId.collectAsStateWithLifecycle()
+    val stockFilter by viewModel.stockFilter.collectAsStateWithLifecycle()
     val lowStockCount by viewModel.lowStockCount.collectAsStateWithLifecycle()
     val error by viewModel.error.collectAsStateWithLifecycle()
     val isSaving by viewModel.isLoading.collectAsStateWithLifecycle()
     var showAddDialog by remember { mutableStateOf(false) }
     var editingProduct by remember { mutableStateOf<ProductEntity?>(null) }
     var deletingProduct by remember { mutableStateOf<ProductEntity?>(null) }
+    var restockingProduct by remember { mutableStateOf<ProductEntity?>(null) }
+
+    LaunchedEffect(requestedStockFilter) {
+        requestedStockFilter?.let { requested ->
+            viewModel.showStockFilter(ProductStockFilter.entries.find { it.name == requested } ?: ProductStockFilter.ALL)
+            onStockFilterApplied()
+        }
+    }
 
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(error) {
-        error?.takeIf { !showAddDialog && editingProduct == null }?.let { message ->
+        error?.takeIf { !showAddDialog && editingProduct == null && restockingProduct == null }?.let { message ->
             snackbarHostState.showSnackbar(message)
             viewModel.clearError()
         }
     }
 
-    LaunchedEffect(showAddDialog, editingProduct?.id) { viewModel.clearError() }
+    LaunchedEffect(showAddDialog, editingProduct?.id, restockingProduct?.id) { viewModel.clearError() }
 
     Scaffold(
         topBar = {
@@ -136,12 +151,27 @@ fun ProductsScreen(
                 onCategorySelected = { viewModel.onCategoryFilterChange(it) }
             )
 
-            if (lowStockCount > 0) {
-                LowStockWarning(lowStockCount)
+            LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(ProductStockFilter.entries) { filter ->
+                    FilterChip(selected = stockFilter == filter, onClick = { viewModel.onStockFilterChange(filter) },
+                        label = { Text(filter.label) })
+                }
+            }
+
+            val hasFilters = searchQuery.isNotBlank() || selectedCategoryId != null || stockFilter != ProductStockFilter.ALL
+            if (hasFilters && products.isNotEmpty()) TextButton(onClick = { viewModel.resetFilters() }) { Text("Сбросить фильтры") }
+
+            if (lowStockCount > 0 && stockFilter != ProductStockFilter.LOW) {
+                LowStockWarning(lowStockCount) { viewModel.showStockFilter(ProductStockFilter.LOW) }
             }
 
             if (products.isEmpty()) {
-                EmptyProductsMessage()
+                EmptyProductsMessage(
+                    filtered = hasFilters,
+                    needsCategory = categories.isEmpty(),
+                    onReset = { viewModel.resetFilters() },
+                    onAdd = { if (categories.isEmpty()) onOpenCategories() else showAddDialog = true }
+                )
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
@@ -151,8 +181,10 @@ fun ProductsScreen(
                     items(products, key = { it.id }) { product ->
                         ProductItemCard(
                             product = product,
+                            categoryName = categories.find { it.id == product.categoryId }?.name.orEmpty(),
                             onEdit = { editingProduct = product },
-                            onDelete = { deletingProduct = product }
+                            onDelete = { deletingProduct = product },
+                            onRestock = { restockingProduct = product }
                         )
                     }
                 }
@@ -167,6 +199,7 @@ fun ProductsScreen(
             categories = categories,
             isSaving = isSaving,
             error = error,
+            onCreateCategory = { showAddDialog = false; onOpenCategories() },
             onConfirm = { name, categoryId, price, stock ->
                 viewModel.addProduct(name, categoryId, price, stock) { showAddDialog = false }
             },
@@ -181,6 +214,7 @@ fun ProductsScreen(
             categories = categories,
             isSaving = isSaving,
             error = error,
+            onCreateCategory = { editingProduct = null; onOpenCategories() },
             onConfirm = { name, categoryId, price, stock ->
                 viewModel.updateProduct(product.id, name, categoryId, price, stock, expectedStock = product.stock) { editingProduct = null }
             },
@@ -197,6 +231,12 @@ fun ProductsScreen(
             },
             onDismiss = { deletingProduct = null }
         )
+    }
+
+    restockingProduct?.let { product ->
+        RestockDialog(product, isSaving, error,
+            onConfirm = { quantity -> viewModel.restockProduct(product.id, quantity) { restockingProduct = null } },
+            onDismiss = { if (!isSaving) restockingProduct = null })
     }
 }
 
@@ -255,10 +295,11 @@ private fun CategoryFilterChips(
 }
 
 @Composable
-private fun LowStockWarning(lowStockCount: Int) {
+private fun LowStockWarning(lowStockCount: Int, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clickable(onClick = onClick)
             .padding(16.dp)
             .background(MaterialTheme.colorScheme.errorContainer)
             .padding(16.dp),
@@ -271,7 +312,7 @@ private fun LowStockWarning(lowStockCount: Int) {
         )
         Spacer(modifier = Modifier.width(8.dp))
         Text(
-            text = stringResource(R.string.low_stock_warning, lowStockCount),
+            text = "Наименований с низким остатком: $lowStockCount. Показать",
             color = MaterialTheme.colorScheme.error,
             fontWeight = FontWeight.Bold
         )
@@ -279,7 +320,7 @@ private fun LowStockWarning(lowStockCount: Int) {
 }
 
 @Composable
-private fun EmptyProductsMessage() {
+private fun EmptyProductsMessage(filtered: Boolean, needsCategory: Boolean, onReset: () -> Unit, onAdd: () -> Unit) {
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
@@ -295,10 +336,16 @@ private fun EmptyProductsMessage() {
                 modifier = Modifier.size(64.dp)
             )
             Text(
-                text = stringResource(R.string.empty_products),
+                text = if (filtered) "Товары не найдены" else stringResource(R.string.empty_products),
                 fontSize = 18.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            Text(if (filtered) "Измените поиск, категорию или остаток."
+                else if (needsCategory) "Сначала создайте категорию, затем добавьте товары."
+                else "Добавьте первый товар, его цену и количество.")
+            TextButton(onClick = if (filtered) onReset else onAdd) {
+                Text(if (filtered) "Сбросить фильтры" else if (needsCategory) "Создать категорию" else "Добавить товар")
+            }
         }
     }
 }
@@ -337,8 +384,10 @@ private fun DeleteProductDialog(
 @Composable
 private fun ProductItemCard(
     product: ProductEntity,
+    categoryName: String,
     onEdit: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onRestock: () -> Unit
 ) {
     val isLowStock = product.stock <= 3 && product.stock > 0
     val isOutOfStock = product.stock == 0
@@ -385,6 +434,7 @@ private fun ProductItemCard(
             }
 
             Spacer(modifier = Modifier.height(8.dp))
+            Text(categoryName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -403,6 +453,8 @@ private fun ProductItemCard(
                     fontWeight = if (isLowStock || isOutOfStock) FontWeight.Bold else FontWeight.Normal
                 )
             }
+
+            TextButton(onClick = onRestock) { Text("Пополнить остаток") }
 
             if (isLowStock) {
                 Spacer(modifier = Modifier.height(4.dp))
@@ -456,6 +508,7 @@ private fun ProductDialog(
     categories: List<CategoryEntity>,
     isSaving: Boolean,
     error: String?,
+    onCreateCategory: () -> Unit,
     onConfirm: (name: String, categoryId: Long, price: Long, stock: Int) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -508,6 +561,9 @@ private fun ProductDialog(
                             )
                         }
                     }
+                } else {
+                    Text("Для товара нужна категория.")
+                    TextButton(onClick = onCreateCategory, enabled = !isSaving) { Text("Создать категорию") }
                 }
 
                 TextField(
@@ -570,4 +626,28 @@ private fun ProductDialog(
             }
         }
     )
+}
+
+@Composable
+private fun RestockDialog(product: ProductEntity, isSaving: Boolean, error: String?, onConfirm: (Int) -> Unit, onDismiss: () -> Unit) {
+    var quantity by remember { mutableStateOf("") }
+    var invalid by remember { mutableStateOf(false) }
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("Пополнить остаток") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(product.name)
+                Text("Будет добавлено к текущему остатку. Цена и название не изменятся.")
+                TextField(quantity, { quantity = it; invalid = false }, label = { Text("Поступило, шт.") },
+                    enabled = !isSaving, singleLine = true, isError = invalid,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                if (invalid) Text("Введите целое количество больше нуля.", color = MaterialTheme.colorScheme.error)
+                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            }
+        },
+        confirmButton = { Button(enabled = !isSaving, onClick = {
+            val amount = quantity.trim().toIntOrNull()
+            invalid = amount == null || amount <= 0
+            if (!invalid) onConfirm(amount!!)
+        }) { Text(if (isSaving) "Сохранение…" else "Пополнить") } },
+        dismissButton = { TextButton(enabled = !isSaving, onClick = onDismiss) { Text("Отмена") } })
 }

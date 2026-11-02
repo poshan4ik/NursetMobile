@@ -74,12 +74,21 @@ fun OrdersScreen(
         factory = OrderViewModel.Factory(
             (LocalContext.current.applicationContext as NursetApplication).database
         )
-    )
+    ),
+    requestedFilter: String? = null,
+    onFilterApplied: () -> Unit = {}
 ) {
     val orders by viewModel.orders.collectAsStateWithLifecycle()
     val ordersCount = orders.size
     var query by rememberSaveable { mutableStateOf("") }
     var selectedFilter by rememberSaveable { mutableStateOf(OrderFilter.ALL) }
+    LaunchedEffect(requestedFilter) {
+        requestedFilter?.let { requested ->
+            query = ""
+            selectedFilter = OrderFilter.entries.find { it.name == requested } ?: OrderFilter.ALL
+            onFilterApplied()
+        }
+    }
     val visibleOrders = remember(orders, query, selectedFilter) { filterOrders(orders, query, selectedFilter) }
     val error by viewModel.error.collectAsStateWithLifecycle()
     val success by viewModel.success.collectAsStateWithLifecycle()

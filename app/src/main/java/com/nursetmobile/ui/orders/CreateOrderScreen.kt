@@ -14,6 +14,10 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -39,6 +43,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Surface
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -57,6 +63,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -64,6 +71,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.nursetmobile.NursetApplication
 import com.nursetmobile.R
 import com.nursetmobile.data.entity.ProductEntity
+import com.nursetmobile.data.entity.CategoryEntity
 import com.nursetmobile.ui.formatPrice
 import com.nursetmobile.viewmodel.CartItem
 import com.nursetmobile.viewmodel.OrderViewModel
@@ -76,6 +84,7 @@ import com.nursetmobile.domain.matchesSearch
 fun CreateOrderScreen(
     onBack: () -> Unit,
     initialClientId: Long = 0L,
+    onCreated: (Long) -> Unit = { onBack() },
     viewModel: OrderViewModel = viewModel(
         factory = OrderViewModel.Factory(
             (LocalContext.current.applicationContext as NursetApplication).database
@@ -89,8 +98,9 @@ fun CreateOrderScreen(
     val cartTotal by viewModel.cartTotal.collectAsStateWithLifecycle()
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
     val error by viewModel.error.collectAsStateWithLifecycle()
-    val success by viewModel.success.collectAsStateWithLifecycle()
+    val createdOrderId by viewModel.createdOrderId.collectAsStateWithLifecycle()
     val availableProducts by viewModel.availableProducts.collectAsStateWithLifecycle()
+    val categories by viewModel.categories.collectAsStateWithLifecycle()
     val clients by viewModel.clients.collectAsStateWithLifecycle()
     val selectedClientId by viewModel.selectedClientId.collectAsStateWithLifecycle()
     var showClientPicker by rememberSaveable { mutableStateOf(false) }
@@ -113,12 +123,10 @@ fun CreateOrderScreen(
         }
     }
 
-    // После создания заказа показываем сообщение и возвращаемся назад
-    LaunchedEffect(success) {
-        success?.let { message ->
-            snackbarHostState.showSnackbar(message)
-            viewModel.clearMessages()
-            onBack()
+    LaunchedEffect(createdOrderId) {
+        createdOrderId?.let { id ->
+            viewModel.consumeCreatedOrder()
+            onCreated(id)
         }
     }
 
@@ -142,13 +150,25 @@ fun CreateOrderScreen(
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
+                },
+                actions = {
+                    TextButton(onClick = { showProductPicker = true }, enabled = !isLoading) { Text("Добавить товары") }
                 }
             )
         },
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
-        floatingActionButton = {
-            if (!isLoading) FloatingActionButton(onClick = { showProductPicker = true }) {
-                Icon(Icons.Default.Add, contentDescription = stringResource(R.string.add))
+        bottomBar = {
+            if (cartItems.isNotEmpty()) Surface(shadowElevation = 4.dp) {
+                Column(Modifier.fillMaxWidth().imePadding().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Позиций: ${cartItems.size}", style = MaterialTheme.typography.bodySmall)
+                    CartTotalCard(cartTotal)
+                    if (cartItems.any { it.quantity > it.maxStock }) {
+                        Text("Проверьте количество недоступных товаров.", color = MaterialTheme.colorScheme.error)
+                    }
+                    CreateOrderButton(isLoading, !isLoading && cartItems.all { it.quantity in 1..it.maxStock }) {
+                        viewModel.createOrder()
+                    }
+                }
             }
         }
     ) { innerPadding ->
@@ -156,11 +176,13 @@ fun CreateOrderScreen(
             Card(Modifier.fillMaxWidth().padding(16.dp)) {
                 Column(Modifier.padding(12.dp)) {
                     val client = clients.find { it.id == selectedClientId }
-                    Text(client?.name ?: "Клиент не выбран", style = MaterialTheme.typography.titleMedium)
+                    Text(client?.name ?: "Без указания клиента", style = MaterialTheme.typography.titleMedium)
+                    if (client == null) Text("Клиент необязателен для оформления заказа.", style = MaterialTheme.typography.bodySmall)
                     client?.let { Text(it.phone, style = MaterialTheme.typography.bodySmall) }
                     Row {
                         TextButton(onClick = { showClientPicker = true }, enabled = !isLoading) { Text(if (client == null) "Выбрать клиента" else "Изменить") }
                         TextButton(onClick = { showClientForm = true }, enabled = !isLoading) { Text("Новый клиент") }
+                        if (client != null) TextButton(onClick = { viewModel.clearClient() }, enabled = !isLoading) { Text("Убрать") }
                     }
                 }
             }
@@ -173,15 +195,12 @@ fun CreateOrderScreen(
         } else {
             CartContent(
                 cartItems = cartItems,
-                cartTotal = cartTotal,
                 isLoading = isLoading,
                 innerPadding = PaddingValues(0.dp),
                 onQuantityChange = { productId, quantity ->
                     viewModel.updateCartItemQuantity(productId, quantity)
                 },
-                onRemove = { productId -> viewModel.removeFromCart(productId) },
-                onCreateOrder = { viewModel.createOrder() },
-                clientName = clients.find { it.id == selectedClientId }?.name
+                onRemove = { productId -> viewModel.removeFromCart(productId) }
             )
         }
         }
@@ -214,6 +233,7 @@ fun CreateOrderScreen(
     if (showProductPicker) {
         ProductPickerDialog(
             products = availableProducts,
+            categories = categories,
             cartItems = cartItems,
             onProductClick = { product ->
                 viewModel.addToCart(product, 1)
@@ -273,41 +293,28 @@ private fun EmptyCartView(
 @Composable
 private fun CartContent(
     cartItems: List<CartItem>,
-    cartTotal: Long,
     isLoading: Boolean,
     innerPadding: PaddingValues,
     onQuantityChange: (productId: Long, quantity: Int) -> Unit,
-    onRemove: (productId: Long) -> Unit,
-    onCreateOrder: () -> Unit,
-    clientName: String?
+    onRemove: (productId: Long) -> Unit
 ) {
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
             .padding(innerPadding)
             .padding(16.dp),
-        contentPadding = PaddingValues(bottom = 88.dp),
+        contentPadding = PaddingValues(bottom = 16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         items(cartItems, key = { it.productId }) { item ->
             OrderCartItemCard(
                 item = item,
+                enabled = !isLoading,
                 onQuantityChange = { newQuantity -> onQuantityChange(item.productId, newQuantity) },
                 onRemove = { onRemove(item.productId) }
             )
         }
 
-        item {
-            CartTotalCard(cartTotal = cartTotal)
-        }
-
-        item {
-            CreateOrderButton(
-                isLoading = isLoading,
-                enabled = !isLoading && cartItems.isNotEmpty() && clientName != null,
-                onClick = onCreateOrder
-            )
-        }
     }
 }
 
@@ -378,6 +385,7 @@ private fun CreateOrderButton(
 @Composable
 private fun OrderCartItemCard(
     item: CartItem,
+    enabled: Boolean,
     onQuantityChange: (Int) -> Unit,
     onRemove: () -> Unit
 ) {
@@ -399,7 +407,7 @@ private fun OrderCartItemCard(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
                 )
-                IconButton(onClick = onRemove) {
+                IconButton(onClick = onRemove, enabled = enabled) {
                     Icon(
                         Icons.Default.Delete,
                         contentDescription = stringResource(R.string.delete),
@@ -425,6 +433,8 @@ private fun OrderCartItemCard(
                 QuantityCounter(
                     quantity = item.quantity,
                     maxQuantity = item.maxStock,
+                    enabled = enabled,
+                    onSetQuantity = onQuantityChange,
                     onDecrease = { onQuantityChange(item.quantity - 1) },
                     onIncrease = { onQuantityChange(item.quantity + 1) }
                 )
@@ -437,41 +447,62 @@ private fun OrderCartItemCard(
 private fun QuantityCounter(
     quantity: Int,
     maxQuantity: Int,
+    enabled: Boolean,
+    onSetQuantity: (Int) -> Unit,
     onDecrease: () -> Unit,
     onIncrease: () -> Unit
 ) {
+    var showInput by remember { mutableStateOf(false) }
+    var input by remember { mutableStateOf("") }
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        IconButton(onClick = onDecrease, enabled = quantity > 1) {
+        IconButton(onClick = onDecrease, enabled = enabled && quantity > 1) {
             Icon(Icons.Default.Remove, contentDescription = stringResource(R.string.decrease))
         }
-        Text(
-            text = quantity.toString(),
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.width(32.dp)
-        )
-        IconButton(onClick = onIncrease, enabled = quantity < maxQuantity) {
+        TextButton(onClick = { input = quantity.toString(); showInput = true }, enabled = enabled && maxQuantity > 0,
+            modifier = Modifier.widthIn(min = 64.dp)) {
+            Text(quantity.toString(), fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        }
+        IconButton(onClick = onIncrease, enabled = enabled && quantity < maxQuantity) {
             Icon(Icons.Default.Add, contentDescription = stringResource(R.string.increase))
         }
     }
+    if (showInput) {
+        val parsed = input.trim().toIntOrNull()
+        val valid = parsed != null && parsed in 1..maxQuantity
+        AlertDialog(onDismissRequest = { showInput = false }, title = { Text("Количество товара") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Доступно: $maxQuantity шт.")
+                    TextField(input, { input = it }, label = { Text("Количество") }, singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        isError = !valid, supportingText = { Text("Введите от 1 до $maxQuantity") })
+                }
+            }, confirmButton = { TextButton(enabled = enabled && valid, onClick = {
+                onSetQuantity(parsed!!); showInput = false
+            }) { Text("Применить") } },
+            dismissButton = { TextButton(onClick = { showInput = false }) { Text("Отмена") } })
+    }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ProductPickerDialog(
     products: List<ProductEntity>,
+    categories: List<CategoryEntity>,
     cartItems: List<CartItem>,
     onProductClick: (ProductEntity) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var searchQuery by remember { mutableStateOf("") }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    var selectedCategoryId by rememberSaveable { mutableStateOf<Long?>(null) }
 
     val filteredProducts = products.filter { product ->
         val matchesSearch =
             searchQuery.isBlank() || product.name.contains(searchQuery.trim(), ignoreCase = true)
-        matchesSearch && product.stock > 0
+        matchesSearch && product.stock > 0 && (selectedCategoryId == null || product.categoryId == selectedCategoryId)
     }
 
     AlertDialog(
@@ -491,6 +522,13 @@ private fun ProductPickerDialog(
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true
                 )
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    item { FilterChip(selected = selectedCategoryId == null, onClick = { selectedCategoryId = null }, label = { Text("Все категории") }) }
+                    items(categories, key = { it.id }) { category ->
+                        FilterChip(selected = selectedCategoryId == category.id,
+                            onClick = { selectedCategoryId = category.id }, label = { Text(category.name) })
+                    }
+                }
                 Spacer(modifier = Modifier.height(8.dp))
                 if (filteredProducts.isEmpty()) {
                     Text(
@@ -520,6 +558,7 @@ private fun ProductPickerDialog(
                                         fontSize = 16.sp,
                                         fontWeight = FontWeight.Medium
                                     )
+                                    Text(categories.find { it.id == product.categoryId }?.name.orEmpty(), style = MaterialTheme.typography.bodySmall)
                                     if (inCart > 0) Text("В корзине: $inCart", style = MaterialTheme.typography.bodySmall)
                                     Text(
                                         text = stringResource(

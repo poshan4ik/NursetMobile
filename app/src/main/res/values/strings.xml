@@ -48,13 +48,6 @@
     <string name="action_process">В обработку</string>
     <string name="action_complete">Выполнить</string>
     <string name="action_cancel">Отменить</string>
-    <string name="stat_products">Товаров: %1$d</string>
-    <string name="stat_categories">Категорий: %1$d</string>
-    <string name="stat_orders">Заказов: %1$d</string>
-    <string name="stat_low_stock">Низкий остаток: %1$d</string>
-    <string name="go_to_products">Перейти к товарам</string>
-    <string name="go_to_categories">Перейти к категориям</string>
-    <string name="go_to_orders">Перейти к заказам</string>
     <string name="cart_empty">Корзина пуста</string>
     <string name="cart_empty_hint">Нажмите «+» чтобы добавить товары</string>
     <string name="select_products">Выбрать товары</string>

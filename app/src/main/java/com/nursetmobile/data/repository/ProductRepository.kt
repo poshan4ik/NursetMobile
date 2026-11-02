@@ -19,6 +19,18 @@ class ProductRepository(private val database: AppDatabase) {
 
     suspend fun deleteProduct(id: Long): Result<Unit> = database.mutate { deleteProductValidated(id) }
 
+    suspend fun restockProduct(id: Long, quantity: Int): Result<Unit> = database.mutate {
+        require(quantity > 0) { "Количество поступившего товара должно быть больше нуля." }
+        val product = productDao.getById(id) ?: error("Товар не найден.")
+        val stock = try {
+            Math.addExact(product.stock, quantity)
+        } catch (_: ArithmeticException) {
+            throw IllegalArgumentException("Слишком большое количество товара.")
+        }
+        productDao.update(product.copy(stock = stock))
+        Result.success(Unit)
+    }
+
     val allProducts: Flow<List<ProductEntity>> = productDao.getAll()
 
     val lowStockCount: Flow<Int> = productDao.getLowStockProducts().map { it.size }
