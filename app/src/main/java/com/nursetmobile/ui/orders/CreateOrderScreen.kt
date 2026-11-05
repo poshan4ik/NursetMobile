@@ -63,6 +63,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -162,6 +163,7 @@ fun CreateOrderScreen(
                 Column(Modifier.fillMaxWidth().imePadding().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Позиций: ${cartItems.size}", style = MaterialTheme.typography.bodySmall)
                     CartTotalCard(cartTotal)
+                    Text(stringResource(R.string.order_stock_create_hint), style = MaterialTheme.typography.bodySmall)
                     if (cartItems.any { it.quantity > it.maxStock }) {
                         Text("Проверьте количество недоступных товаров.", color = MaterialTheme.colorScheme.error)
                     }
@@ -281,7 +283,9 @@ private fun EmptyCartView(
             Text(
                 text = stringResource(R.string.cart_empty_hint),
                 fontSize = 16.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 24.dp)
             )
             Button(onClick = onSelectProducts) {
                 Text(stringResource(R.string.select_products))
@@ -430,6 +434,10 @@ private fun OrderCartItemCard(
                 Text(if (item.maxStock == 0) "Товар недоступен. Удалите его из заказа."
                     else "В наличии: ${item.maxStock} шт.",
                     color = if (item.quantity > item.maxStock) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+                if (item.quantity in 1..item.maxStock) {
+                    Text(stringResource(R.string.order_stock_preview, item.maxStock - item.quantity),
+                        style = MaterialTheme.typography.bodySmall)
+                }
                 QuantityCounter(
                     quantity = item.quantity,
                     maxQuantity = item.maxStock,

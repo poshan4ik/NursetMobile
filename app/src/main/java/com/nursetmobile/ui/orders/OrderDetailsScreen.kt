@@ -216,6 +216,7 @@ private fun OrderDetailsContent(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item { OrderInfoCard(order = order, status = status) }
+        item { OrderStockEffectCard(status) }
         item { Text(stringResource(R.string.order_items), style = MaterialTheme.typography.titleMedium) }
         items(orderItems, key = { it.id }) { OrderDetailItemCard(it) }
         item { OrderTotalCard(totalPrice = order.totalPrice) }
@@ -225,6 +226,21 @@ private fun OrderDetailsContent(
             onStatusChange = onStatusChange,
             onCancelRequest = onCancelRequest
         ) }
+    }
+}
+
+@Composable
+private fun OrderStockEffectCard(status: OrderStatus) {
+    val description = when (status) {
+        OrderStatus.NEW, OrderStatus.PROCESSING -> R.string.order_stock_effect_active
+        OrderStatus.COMPLETED -> R.string.order_stock_effect_completed
+        OrderStatus.CANCELLED -> R.string.order_stock_effect_cancelled
+    }
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(stringResource(R.string.order_stock_effect_title), style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(description), style = MaterialTheme.typography.bodyMedium)
+        }
     }
 }
 
